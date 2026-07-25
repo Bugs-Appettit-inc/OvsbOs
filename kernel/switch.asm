@@ -66,6 +66,7 @@ context_switch:
 
     ; User process: pop registers and iretq to ring 3
     ; Stack layout: [r15,r14,...,rax, RIP,CS,RFLAGS,RSP,SS]
+    clts                     ; limpa Task Switched flag (CR0.TS)
     pop r15
     pop r14
     pop r13

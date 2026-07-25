@@ -55,6 +55,23 @@ static int str_equal(const char *a, const char *b) {
 }
 
 void syscall_handler(uint64_t *regs) {
+    /* Salva e limpa CR0/CR4 para evitar #NM */
+    uint64_t saved_cr0, saved_cr4;
+    __asm__ volatile("mov %%cr0, %0" : "=r"(saved_cr0));
+    __asm__ volatile("mov %%cr4, %0" : "=r"(saved_cr4));
+    __asm__ volatile("clts");  /* limpa TS */
+    {
+        uint64_t cr0;
+        __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
+        cr0 &= ~((uint64_t)0x04);  /* limpa EM */
+        __asm__ volatile("mov %0, %%cr0" :: "r"(cr0));
+    }
+    {
+        uint64_t cr4;
+        __asm__ volatile("mov %%cr4, %0" : "=r"(cr4));
+        cr4 |= 0x200;  /* seta OSFXSR */
+        __asm__ volatile("mov %0, %%cr4" :: "r"(cr4));
+    }
     uint64_t num  = regs[0];
     uint64_t a1 = regs[4];
     uint64_t a2 = regs[3];

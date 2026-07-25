@@ -1,6 +1,6 @@
 # ♥ USERLAND MAKEFILE ~ "Compila os programinhas ring 3!"
 CC = gcc
-CFLAGS = -ffreestanding -nostdlib -static -fno-PIC \
+CFLAGS = -mno-sse -mno-sse2 -mno-sse3 -ffreestanding -nostdlib -static -fno-PIC \
          -mno-red-zone -mno-mmx -mno-sse -mgeneral-regs-only \
          -nostartfiles -fno-asynchronous-unwind-tables \
          -fno-unwind-tables -Wl,--build-id=none \

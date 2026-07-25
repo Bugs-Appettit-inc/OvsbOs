@@ -20,6 +20,7 @@
 #include "../lib/gui/vesa.h"
 #include "../lib/wm/wm.h"
 #include "../lib/owt/owt.h"
+#include "apps_bin.h"
 
 void keyboard_init(void);
 void pic_init(void);
@@ -49,6 +50,29 @@ void user_prog_launch(void) {
     console_write("Programa ring 3 encerrou!\n");
 }
 
+/* ♥ Executa um app embutido pelo nome! */
+void app_launch(const char *name) {
+    for (int i = 0; i < NUM_APPS; i++) {
+        if (strcmp(name, app_table[i].name) == 0) {
+            console_printf("Iniciando app %s...\n", name);
+            uint8_t *dst = (uint8_t *)USER_PROG_ADDR;
+            for (unsigned int j = 0; j < app_table[i].size; j++)
+                dst[j] = app_table[i].data[j];
+            int pid = process_create_user(name, USER_PROG_ADDR, user_stack, USER_STACK_SIZE);
+            if (pid < 0) { console_write("Erro!\n"); return; }
+            process_switch_to(pid);
+            console_printf("App %s encerrou!\n", name);
+            return;
+        }
+    }
+    console_write("App nao encontrado! Apps: ");
+    for (int i = 0; i < NUM_APPS; i++) {
+        console_write(app_table[i].name);
+        console_write(" ");
+    }
+    console_write("\n");
+}
+
 void kmain(uint32_t magic, uint32_t mb_info) {
     serial_init();
     serial_puts("[OvsbMkM] Iniciando~ kyun!\r\n");
@@ -60,7 +84,18 @@ void kmain(uint32_t magic, uint32_t mb_info) {
     } else {
         console_write("FAT32: sem disco ou erro\n");
     }
-    __asm__ volatile("sti");
+    
+    /* ♥ Inicializa FPU/SSE globalmente para todos os processos ring 3 */
+    {
+        uint64_t _cr0, _cr4;
+        __asm__ volatile("mov %%cr0, %0" : "=r"(_cr0));
+        _cr0 &= ~((uint64_t)0x0C);  // limpa TS (bit 3) e EM (bit 2)
+        __asm__ volatile("mov %0, %%cr0" :: "r"(_cr0));
+        __asm__ volatile("mov %%cr4, %0" : "=r"(_cr4));
+        _cr4 |= 0x200;              // seta OSFXSR (bit 9)
+        __asm__ volatile("mov %0, %%cr4" :: "r"(_cr4));
+    }
+__asm__ volatile("sti");
     pit_init();
 
     g_fb.addr = 0;

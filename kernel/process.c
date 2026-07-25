@@ -91,7 +91,6 @@ static void setup_user_stack(pcb_t *pcb, void *entry, void *ustack, uint64_t ust
     *--sp = 0; /* rdi */  *--sp = 0; /* rsi */
     *--sp = 0; /* rdx */  *--sp = 0; /* rcx */
     *--sp = 0; /* rax */
-    *--sp = 0; /* extra padding */
     pcb->kernel_rsp = (uint64_t)sp;
 }
 
@@ -119,6 +118,15 @@ int process_create_user(const char *name, void *entry, void *user_stack, uint64_
     pcb->heap_start = 0x201000;
 
     setup_user_stack(pcb, entry, user_stack, user_stack_size);
+    
+    /* Inicializa registradores salvos (senão o context_switch pega lixo!) */
+    pcb->s_rbx = 0;
+    pcb->s_rbp = 0;
+    pcb->s_r12 = 0;
+    pcb->s_r13 = 0;
+    pcb->s_r14 = 0;
+    pcb->s_r15 = 0;
+    
     return pcb->pid;
 }
 

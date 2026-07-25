@@ -67,7 +67,36 @@ void idt_set_irq1(void) {
 }
 
 void idt_handler(uint64_t *regs) {
-    (void)regs;
+    uint64_t int_num = regs[16];  /* número da interrupção */
+    uint64_t err_code = regs[17]; /* código de erro */
+    uint64_t rip = regs[15];      /* RIP no momento da exceção */
+    
+    serial_puts("\r\n[EXC] Excecao ");
+    /* Imprime número como hex simples */
+    char hex[] = "0123456789ABCDEF";
+    serial_putc(hex[(int_num >> 4) & 0xF]);
+    serial_putc(hex[int_num & 0xF]);
+    serial_puts(" RIP=");
+    for (int i = 60; i >= 0; i -= 4) {
+        serial_putc(hex[(rip >> i) & 0xF]);
+    }
+    serial_puts(" ERR=");
+    for (int i = 28; i >= 0; i -= 4) {
+        serial_putc(hex[(err_code >> i) & 0xF]);
+    }
+    serial_puts("\r\n");
+    
+    /* Se for page fault (14), mostra o endereço que causou */
+    if (int_num == 14) {
+        uint64_t cr2;
+        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+        serial_puts("[PF] CR2=");
+        for (int i = 60; i >= 0; i -= 4) {
+            serial_putc(hex[(cr2 >> i) & 0xF]);
+        }
+        serial_puts("\r\n");
+    }
+    
     __asm__ volatile("cli; hlt");
 }
 

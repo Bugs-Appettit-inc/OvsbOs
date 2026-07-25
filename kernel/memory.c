@@ -374,17 +374,17 @@ int pml4_map_phys(uint64_t pml4_pa, uint64_t virt_addr, uint64_t phys_addr,
             uint64_t *pdpt = mmap_user(0, 4096, 3, 0);
             if (!pdpt) return -1;
             for (int i = 0; i < 512; i++) pdpt[i] = 0;
-            pml4[pml4_idx] = (uint64_t)(uintptr_t)pdpt | 0x03;
+            pml4[pml4_idx] = (uint64_t)(uintptr_t)pdpt | 0x07;  /* User+RW+Present */
         }
         uint64_t *pdpt = (uint64_t *)(uintptr_t)(pml4[pml4_idx] & ~0xFFF);
         if (!(pdpt[pdpt_idx] & 1)) {
             uint64_t *pd = mmap_user(0, 4096, 3, 0);
             if (!pd) return -1;
             for (int i = 0; i < 512; i++) pd[i] = 0;
-            pdpt[pdpt_idx] = (uint64_t)(uintptr_t)pd | 0x03;
+            pdpt[pdpt_idx] = (uint64_t)(uintptr_t)pd | 0x07;  /* User+RW+Present */
         }
         uint64_t *pd = (uint64_t *)(uintptr_t)(pdpt[pdpt_idx] & ~0xFFF);
-        pd[pd_idx] = pa | entry_flags;
+        pd[pd_idx] = pa | entry_flags;  /* entry_flags já tem User=1 */
     }
     __asm__ volatile("mov %0, %%cr3" : : "r"(pml4_pa) : "memory");
     return 0;
