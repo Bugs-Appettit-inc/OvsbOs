@@ -14,6 +14,7 @@
 #include "../fs/fat32.h"
 #include "../kernel/utils.h"
 #include "../lib/gui/vesa.h"
+#include "../lib/wm/wm.h"
 
 /* Tabela de descritores de arquivo */
 #define MAX_FDS 16
@@ -310,6 +311,27 @@ void syscall_handler(uint64_t *regs) {
             : "+D"(fb_phys), "+S"(backbuffer), "+c"(pixels)
             : : "memory"
         );
+        ret = 0;
+        break;
+    }
+
+    case SYS_wm_get_backbuf: {
+        uint32_t *bb = wm_get_backbuf();
+        if (!bb) { ret = -1; break; }
+        *(uint64_t *)a1 = (uint64_t)(uintptr_t)bb;
+        ret = 0;
+        break;
+    }
+    
+    case SYS_wm_get_info: {
+        *(uint32_t *)a1 = wm_get_scr_w();
+        *(uint32_t *)a2 = wm_get_scr_h();
+        ret = 0;
+        break;
+    }
+    
+    case SYS_wm_flush: {
+        wm_flush();
         ret = 0;
         break;
     }

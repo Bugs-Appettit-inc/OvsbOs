@@ -37,6 +37,9 @@
 /* ♥ Syscalls de display (framebuffer) */
 #define SYS_disp_get_fb  202
 #define SYS_disp_flush   203
+#define SYS_wm_get_backbuf 204
+#define SYS_wm_get_info    205
+#define SYS_wm_flush       206
 
 void syscall_init(void);
 void syscall_handler(uint64_t *regs);

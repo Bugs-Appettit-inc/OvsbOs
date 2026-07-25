@@ -150,6 +150,12 @@ static void cmd_exec(const char *args) {
     console_write("exec: processo encerrou\n");
 }
 
+static void cmd_owtapp(void) { cmd_exec("OWTAPP.BIN"); }
+
+static void cmd_owttest(void) {
+    cmd_exec("OWTTEST.BIN");
+}
+
 static void cmd_desktop(void) { app_launch("desktop"); }
 static void cmd_app(const char *args) {
     if (!args || !args[0]) {
@@ -200,7 +206,9 @@ static void execute(const char *cmd) {
     else if (strieq(cmd, "exec", 4) && cmd_len == 4) cmd_exec(args);
     else if (strieq(cmd, "ls", 2) && cmd_len == 2) cmd_ls();
     else if (strieq(cmd, "cd", 2) && cmd_len == 2) cmd_cd(args);
-        else if (strieq(cmd, "desktop", 7) && cmd_len == 7) cmd_desktop();
+        else if (strieq(cmd, "owtapp", 6) && cmd_len == 6) cmd_owtapp();
+    else if (strieq(cmd, "owttest", 7) && cmd_len == 7) cmd_owttest();
+    else if (strieq(cmd, "desktop", 7) && cmd_len == 7) cmd_desktop();
     else if (strieq(cmd, "app", 3) && cmd_len == 3) cmd_app(*args ? args : "");
     else if (strieq(cmd, "owt", 3) && cmd_len == 3) { owt_demo(); console_write("OWT ok\n"); }
     else if (strieq(cmd, "reboot", 6) && cmd_len == 6) cmd_reboot();
