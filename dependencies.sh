@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+                    #!/usr/bin/env bash
 set -euo pipefail
 
 OS="$(uname -s 2>/dev/null || echo Linux)"
@@ -17,7 +17,9 @@ print_manual() {
       echo "winget install Git.Git"
       echo "winget install GnuWin32.Make"
       echo "winget install --id Microsoft.VisualStudio.2022.BuildTools"
-      echo "choco install -y mingw nasm qemu"
+      echo "winget install --id QEMU.QEMU"
+      echo "py -m pip install --user tk"
+      echo "choco install -y git make mingw nasm qemu python"
       ;;
     wsl|linux)
       echo "sudo apt-get update"
@@ -85,13 +87,13 @@ install_windows() {
   echo "[deps] Detectado ambiente: windows"
   if check_cmd winget; then
     echo "[deps] Instalando ferramentas via winget..."
-    winget install --accept-source-agreements --accept-package-agreements -e --id Git.Git --id GnuWin32.Make --id Microsoft.VisualStudio.2022.BuildTools || true
+    winget install --accept-source-agreements --accept-package-agreements -e --id Git.Git --id GnuWin32.Make --id Microsoft.VisualStudio.2022.BuildTools --id QEMU.QEMU --id Python.Python.3.12 || true
     return 0
   fi
 
   if check_cmd choco; then
     echo "[deps] Instalando ferramentas via choco..."
-    choco install -y git make mingw nasm qemu || true
+    choco install -y git make mingw nasm qemu python || true
     return 0
   fi
 

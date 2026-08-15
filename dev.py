@@ -43,7 +43,8 @@ def print_manual_guide(env):
         print("- winget install Git.Git")
         print("- winget install GnuWin32.Make")
         print("- winget install --id Microsoft.VisualStudio.2022.BuildTools")
-        print("- Instale GCC/MinGW e NASM manualmente.")
+        print("- winget install --id QEMU.QEMU")
+        print("- py -m pip install --user tk")
         print("- Opcional: choco install git make mingw nasm qemu")
     elif env == "wsl":
         print("- sudo apt-get update")
@@ -97,14 +98,14 @@ def install_auto_dependencies():
         for manager in ["winget", "choco"]:
             if which(manager):
                 if manager == "winget":
-                    cmd = "winget install --accept-source-agreements --accept-package-agreements -e --id Git.Git --id GnuWin32.Make --id Microsoft.VisualStudio.2022.BuildTools"
+                    cmd = "winget install --accept-source-agreements --accept-package-agreements -e --id Git.Git --id GnuWin32.Make --id Microsoft.VisualStudio.2022.BuildTools --id QEMU.QEMU --id Python.Python.3.12"
                     rc, out, err = run_cmd(cmd, shell=True)
                     if rc == 0:
                         log("Dependencias Windows instaladas via winget.")
                         return 0
                     print(out or err)
                 else:
-                    cmd = "choco install -y git make mingw nasm qemu"
+                    cmd = "choco install -y git make mingw nasm qemu python"
                     rc, out, err = run_cmd(cmd, shell=True)
                     if rc == 0:
                         log("Dependencias Windows instaladas via choco.")

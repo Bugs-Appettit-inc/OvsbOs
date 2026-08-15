@@ -24,6 +24,7 @@ class DevLauncher:
         self.root.minsize(820, 500)
 
         self.project_root = Path(__file__).resolve().parent
+        self.system_name = self.detect_system()
         self.status_var = StringVar(value="Pronto")
         self.auto_reload = BooleanVar(value=False)
         self.log_box = None
@@ -35,6 +36,13 @@ class DevLauncher:
         self.scan_files()
         self.start_watch()
 
+    def detect_system(self):
+        if os.environ.get("WSL_DISTRO_NAME"):
+            return "wsl"
+        if os.name == "nt" or sys.platform.startswith("win"):
+            return "windows"
+        return "linux"
+
     def build_ui(self):
         frame = ttk.Frame(self.root, padding=12)
         frame.pack(fill="both", expand=True)
@@ -42,6 +50,8 @@ class DevLauncher:
         top = ttk.Frame(frame)
         top.pack(fill="x", pady=(0, 10))
 
+        ttk.Label(top, text="Sistema:", font=("Segoe UI", 10, "bold")).pack(side="left")
+        ttk.Label(top, text=self.system_name.upper(), foreground="#0b7cff", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(4, 12))
         ttk.Label(top, text="Projeto:", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(top, text=str(self.project_root), foreground="#0b7cff").pack(side="left", padx=(8, 0))
         ttk.Checkbutton(top, text="Auto reload", variable=self.auto_reload).pack(side="right")
@@ -89,9 +99,16 @@ class DevLauncher:
             return 1, f"Erro: {exc}\n"
 
     def install_deps(self):
-        self.log("\n>>> ./dependencies.sh\n")
+        if self.system_name == "windows":
+            command = "powershell -ExecutionPolicy Bypass -File ./dependencies.ps1"
+            label = "./dependencies.ps1"
+        else:
+            command = "bash ./dependencies.sh"
+            label = "./dependencies.sh"
+
+        self.log(f"\n>>> {label}\n")
         self.set_status("Instalando deps...")
-        code, output = self.run_shell("bash ./dependencies.sh")
+        code, output = self.run_shell(command)
         self.log(output)
         if code == 0:
             self.set_status("Dependencias OK", "#1f7a1f")
