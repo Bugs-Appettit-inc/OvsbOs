@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -25,6 +26,7 @@ class DevLauncher:
 
         self.project_root = Path(__file__).resolve().parent
         self.system_name = self.detect_system()
+        self.python_cmd = self.detect_python_command()
         self.status_var = StringVar(value="Pronto")
         self.auto_reload = BooleanVar(value=False)
         self.log_box = None
@@ -42,6 +44,22 @@ class DevLauncher:
         if os.name == "nt" or sys.platform.startswith("win"):
             return "windows"
         return "linux"
+
+    def detect_python_command(self):
+        candidates = []
+        if self.system_name == "windows":
+            candidates = ["py", "python", "python3"]
+        else:
+            candidates = ["python3", "python", "py"]
+
+        for candidate in candidates:
+            resolved = shutil.which(candidate)
+            if resolved:
+                if candidate == "py":
+                    return ["py", "-3"]
+                return [candidate]
+
+        return ["python3"]
 
     def build_ui(self):
         frame = ttk.Frame(self.root, padding=12)
@@ -115,10 +133,24 @@ class DevLauncher:
         else:
             self.set_status("Falha nas deps", "#b42318")
 
+    def run_python_script(self, *args):
+        command = self.python_cmd + list(args)
+        try:
+            process = subprocess.run(
+                command,
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+            return process.returncode, (process.stdout or "") + (process.stderr or "")
+        except Exception as exc:
+            return 1, f"Erro: {exc}\n"
+
     def run_test(self):
-        self.log("\n>>> python3 dev.py test\n")
+        self.log(f"\n>>> {' '.join(self.python_cmd + ['dev.py', 'test'])}\n")
         self.set_status("Testando...")
-        code, output = self.run_shell("python3 dev.py test")
+        code, output = self.run_python_script("dev.py", "test")
         self.log(output)
         if code == 0:
             self.set_status("Teste OK", "#1f7a1f")
@@ -130,9 +162,9 @@ class DevLauncher:
             self.log("[gui] build ja em andamento; ignorando nova disparada.\n")
             return
         try:
-            self.log("\n>>> python3 dev.py build\n")
+            self.log(f"\n>>> {' '.join(self.python_cmd + ['dev.py', 'build'])}\n")
             self.set_status("Buildando...")
-            code, output = self.run_shell("python3 dev.py build")
+            code, output = self.run_python_script("dev.py", "build")
             self.log(output)
             if code == 0:
                 self.set_status("Build OK", "#1f7a1f")
@@ -142,9 +174,9 @@ class DevLauncher:
             self.build_lock.release()
 
     def run_project(self):
-        self.log("\n>>> python3 dev.py run\n")
+        self.log(f"\n>>> {' '.join(self.python_cmd + ['dev.py', 'run'])}\n")
         self.set_status("Executando QEMU...")
-        code, output = self.run_shell("python3 dev.py run")
+        code, output = self.run_python_script("dev.py", "run")
         self.log(output)
         if code == 0:
             self.set_status("Exec OK", "#1f7a1f")
