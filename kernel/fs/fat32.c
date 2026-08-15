@@ -16,10 +16,10 @@
 
 #include "fat32.h"
 #include <stdint.h>
-#include "../kernel/utils.h"
-#include "../kernel/console.h"
-#include "../drivers/ata.h"
-#include "../kernel/memory.h"
+#include "utils.h"
+#include "console.h"
+#include "drivers/ata.h"
+#include "memory.h"
 
 /* Cores pro list_dir */
 #define C_DIR  0xFF60FF60

@@ -1,6 +1,6 @@
 /* ♥ WM ~ window manager! janelinhas graficas~ */
 #include "wm.h"
-#include "../../kernel/memory.h"
+#include "memory.h"
 
 static uint32_t *backbuf;
 static uint32_t *framebuf;

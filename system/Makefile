@@ -7,7 +7,9 @@ CFLAGS = -ffreestanding -nostdlib -static -fno-PIC \
 LDFLAGS = -e _start -T libc/link.ld
 OBJCOPY = objcopy
 PACKER = python3 tools/macho_pack.py
-BUILD = ../build/userland
+ROOT_DIR := $(abspath ..)
+BUILD = $(ROOT_DIR)/build/system
+OBJ_DIR = $(BUILD)/obj
 
 LIBC_SRC = libc/crt0.c libc/stdio.c libc/stdlib.c libc/string.c libc/tui.c
 OWT_SRC = lib/owt/owt_base.c lib/owt/owt_draw.c lib/owt/owt_theme.c \
@@ -25,8 +27,8 @@ PROGS_MACHO = $(addprefix $(BUILD)/, $(addsuffix .macho, $(PROGS)))
 
 all: $(PROGS_MACHO)
 
-$(BUILD):
-	mkdir -p $(BUILD)
+$(BUILD) $(OBJ_DIR):
+	mkdir -p $@
 
 $(BUILD)/%.elf: progs/%.c $(LIBC_SRC) $(OWT_SRC) $(WM_SRC) | $(BUILD)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBC_SRC) $(OWT_SRC) $(WM_SRC)
@@ -38,4 +40,6 @@ $(BUILD)/%.macho: $(BUILD)/%.bin
 	$(PACKER) $< $@
 
 clean:
-	rm -f $(PROGS_ELF) $(PROGS_BIN) $(PROGS_MACHO)
+	find . -type f \( -name '*.o' -o -name '*.bin' -o -name '*.elf' -o -name '*.macho' \) -delete
+	rm -rf $(BUILD)
+	@echo "System limpo."

@@ -12,14 +12,13 @@
 #include "tss.h"
 #include "process.h"
 #include "syscall.h"
-#include "../drivers/ata.h"
-#include "../drivers/mouse.h"
-#include "../drivers/keyboard.h"
-#include "../drivers/ata.h"
-#include "../fs/fat32.h"
-#include "../lib/gui/vesa.h"
-#include "../lib/wm/wm.h"
-#include "../lib/owt/owt.h"
+#include "utils.h"
+#include "drivers/ata.h"
+#include "drivers/mouse.h"
+#include "drivers/keyboard.h"
+#include "fs/fat32.h"
+#include "gui/vesa.h"
+#include "wm/wm.h"
 #include "apps_bin.h"
 
 void keyboard_init(void);
@@ -38,7 +37,6 @@ extern const int _binary_user_prog_size;
 static char user_stack[USER_STACK_SIZE] __attribute__((aligned(16)));
 
 extern const uint8_t _binary_user_prog_start[];
-extern void owt_demo(void);
 void user_prog_launch(void) {
     console_write("Iniciando programa ring 3...\n");
     uint8_t *dst = (uint8_t *)USER_PROG_ADDR;

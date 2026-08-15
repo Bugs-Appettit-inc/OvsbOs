@@ -10,11 +10,11 @@
 #include "console.h"
 #include "serial.h"
 #include "pit.h"
-#include "../drivers/keyboard.h"
-#include "../fs/fat32.h"
-#include "../kernel/utils.h"
-#include "../lib/gui/vesa.h"
-#include "../lib/wm/wm.h"
+#include "drivers/keyboard.h"
+#include "fs/fat32.h"
+#include "utils.h"
+#include "gui/vesa.h"
+#include "wm/wm.h"
 
 /* Tabela de descritores de arquivo */
 #define MAX_FDS 16

@@ -3,7 +3,7 @@
  * Dica: framebuffer_t tem addr, pitch, width, height ~
  * Se o addr for NULL, a tela vai ficar preta~ que triste~ */
 #include "vesa.h"
-#include "../kernel/memory.h"
+#include "memory.h"
 
 static framebuffer_t *g_fb = 0;
 static uint32_t *g_backbuffer = 0;

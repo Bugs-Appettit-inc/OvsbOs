@@ -1,6 +1,6 @@
 /* ♥ ATA ~ driver de disco ATA! le e escreve setores~ */
 #include "ata.h"
-#include "../kernel/serial.h"
+#include "serial.h"
 
 #define ATA_DATA       0x1F0
 #define ATA_SECTORS    0x1F2
@@ -29,6 +29,16 @@ static int ata_wait(void) {
     return -1;
 }
 
+static inline uint16_t inw(uint16_t port) {
+    uint16_t ret;
+    __asm__ volatile ("inw %1, %0" : "=a"(ret) : "d"(port));
+    return ret;
+}
+
+static inline void outw(uint16_t port, uint16_t val) {
+    __asm__ volatile ("outw %0, %1" :: "a"(val), "d"(port));
+}
+
 void ata_init(void) {
     serial_puts("[ATA] Inicializando...\r\n");
     outb(ATA_DRIVE, 0xE0);
@@ -39,7 +49,7 @@ void ata_init(void) {
     if (ata_wait() != 0) { serial_puts("[ATA] Sem disco!\r\n"); return; }
     uint16_t buf[256];
     for (int i = 0; i < 256; i++)
-        __asm__ volatile ("inw %1, %0" : "=a"(buf[i]) : "Nd"(ATA_DATA));
+        buf[i] = inw(ATA_DATA);
     serial_puts("[ATA] Disco: QEMU HARDDISK\r\n");
 }
 
@@ -53,8 +63,7 @@ int ata_read_sector(uint32_t lba, uint8_t *buffer) {
     outb(ATA_COMMAND, 0x20);
     if (ata_wait() != 0) return -1;
     for (int i = 0; i < 256; i++) {
-        uint16_t d;
-        __asm__ volatile ("inw %1, %0" : "=a"(d) : "Nd"(ATA_DATA));
+        uint16_t d = inw(ATA_DATA);
         buffer[i*2] = d & 0xFF;
         buffer[i*2+1] = (d >> 8) & 0xFF;
     }
@@ -72,7 +81,7 @@ int ata_write_sector(uint32_t lba, const uint8_t *buffer) {
     if (ata_wait() != 0) return -1;
     for (int i = 0; i < 256; i++) {
         uint16_t d = buffer[i*2] | (buffer[i*2+1] << 8);
-        __asm__ volatile ("outw %0, %1" :: "a"(d), "Nd"(ATA_DATA));
+        outw(ATA_DATA, d);
     }
     ata_wait();
     return 0;

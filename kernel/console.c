@@ -1,6 +1,6 @@
 #include "console.h"
 #include "serial.h"
-#include "../lib/gui/vesa.h"
+#include "gui/vesa.h"
 
 #define CONSOLE_COLS 80
 #define CONSOLE_ROWS 45

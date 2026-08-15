@@ -5,8 +5,8 @@
 #include "memory.h"
 #include "mach_o.h"
 #include "process.h"
-#include "../lib/gui/vesa.h"
-#include "../fs/fat32.h"
+#include "gui/vesa.h"
+#include "fs/fat32.h"
 extern void app_launch(const char *name);
 #include <stdint.h>
 
@@ -23,8 +23,6 @@ static int  cmd_pos = 0;
 
 extern framebuffer_t g_fb;
 extern void user_prog_launch(void);
-extern void owt_demo(void);
-
 static void prompt(void) {
     console_write("ovsb> ");
 }
@@ -40,7 +38,8 @@ static void cmd_help(void) {
     console_write("  exec <arquivo>        Carrega e executa Mach-O do FAT32\n");
     console_write("  ls                    Lista diretorio FAT32\n");
     console_write("  cd <dir>              Muda diretorio FAT32\n");
-    console_write("  owt                   Demo do OWT (widget toolkit)\n");
+    console_write("  owttest               Executa demo OWT (ring 3, FAT32)\n");
+    console_write("  owtapp                Executa app OWT (ring 3, FAT32)\n");
     console_write("  reboot                Reinicia o sistema\n");
 }
 
@@ -210,7 +209,7 @@ static void execute(const char *cmd) {
     else if (strieq(cmd, "owttest", 7) && cmd_len == 7) cmd_owttest();
     else if (strieq(cmd, "desktop", 7) && cmd_len == 7) cmd_desktop();
     else if (strieq(cmd, "app", 3) && cmd_len == 3) cmd_app(*args ? args : "");
-    else if (strieq(cmd, "owt", 3) && cmd_len == 3) { owt_demo(); console_write("OWT ok\n"); }
+    else if (strieq(cmd, "owt", 3) && cmd_len == 3) cmd_owttest();
     else if (strieq(cmd, "reboot", 6) && cmd_len == 6) cmd_reboot();
     else {
         console_write("comando nao encontrado: ");
