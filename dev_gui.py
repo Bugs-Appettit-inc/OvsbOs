@@ -70,6 +70,8 @@ class DevLauncher:
 
         ttk.Label(top, text="Sistema:", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(top, text=self.system_name.upper(), foreground="#0b7cff", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(4, 12))
+        ttk.Label(top, text="Python:", font=("Segoe UI", 10, "bold")).pack(side="left")
+        ttk.Label(top, text=" ".join(self.python_cmd), foreground="#0b7cff", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(4, 12))
         ttk.Label(top, text="Projeto:", font=("Segoe UI", 10, "bold")).pack(side="left")
         ttk.Label(top, text=str(self.project_root), foreground="#0b7cff").pack(side="left", padx=(8, 0))
         ttk.Checkbutton(top, text="Auto reload", variable=self.auto_reload).pack(side="right")
@@ -118,15 +120,23 @@ class DevLauncher:
 
     def install_deps(self):
         if self.system_name == "windows":
-            command = "powershell -ExecutionPolicy Bypass -File ./dependencies.ps1"
-            label = "./dependencies.ps1"
+            deps_script = str(self.project_root / "dependencies.ps1")
+            command = ["powershell", "-ExecutionPolicy", "Bypass", "-File", deps_script]
+            label = deps_script
         else:
-            command = "bash ./dependencies.sh"
-            label = "./dependencies.sh"
+            deps_script = str(self.project_root / "dependencies.sh")
+            command = ["bash", deps_script]
+            label = deps_script
 
         self.log(f"\n>>> {label}\n")
         self.set_status("Instalando deps...")
-        code, output = self.run_shell(command)
+        try:
+            process = subprocess.run(command, cwd=str(self.project_root), capture_output=True, text=True, timeout=600)
+            output = (process.stdout or "") + (process.stderr or "")
+            code = process.returncode
+        except Exception as exc:
+            output = f"Erro: {exc}\n"
+            code = 1
         self.log(output)
         if code == 0:
             self.set_status("Dependencias OK", "#1f7a1f")
@@ -134,7 +144,8 @@ class DevLauncher:
             self.set_status("Falha nas deps", "#b42318")
 
     def run_python_script(self, *args):
-        command = self.python_cmd + list(args)
+        script_path = str(self.project_root / "dev.py")
+        command = self.python_cmd + [script_path] + list(args)
         try:
             process = subprocess.run(
                 command,

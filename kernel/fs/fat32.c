@@ -6,7 +6,7 @@
  * Cada entrada de diretorio tem 32 bytes com nome 8.3~
  * Nomes Longos (LFN) sao ignorados aqui~ preguiça~ kyun!
  *
- * Bugs corrigidos (da versao TipOS):
+ * Fixes de compatibilidade:
  * 1. name_to_83() nao respeitava terminador nulo~
  *    Nomes curtos tipo "X" corrompiam o buffer com lixo da pilha~
  * 2. read_chain/write_chain: divisao to_read/512 truncava <512 pra 0~

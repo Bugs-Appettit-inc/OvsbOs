@@ -130,7 +130,7 @@ int process_create_user(const char *name, void *entry, void *user_stack, uint64_
     return pcb->pid;
 }
 
-/* ♥ proc_spawn ~ API nova do TipOS! Cria processo com PML4 propria!
+/* ♥ proc_spawn ~ Cria processo com PML4 propria!
  * entry = endereco virtual do codigo, user_stack_top = topo da pilha user */
 int proc_spawn(const char *name, void *entry, void *user_stack_top) {
     int slot = -1;
@@ -217,7 +217,7 @@ void process_exit_current(int code) {
     context_switch(p, next);
 }
 
-/* ♥ proc_exit ~ API nova do TipOS! Exit com schedule */
+/* ♥ proc_exit ~ Exit com schedule */
 void proc_exit(int code) {
     if (current_pid < 0 || current_pid >= MAX_PROC) return;
     fds_cleanup();
