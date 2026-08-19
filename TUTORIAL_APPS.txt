@@ -1,6 +1,6 @@
 <!-- moe moe kyun <3 -->
 ╔══════════════════════════════════════════════════════╗
-║  💖  TUTORIAL DO REINO WHIMEKASY: APPS PRO TipOS  💖             ║
+║  💖  TUTORIAL DO REINO WHIMEKASY: APPS PRO OvsbOS  💖             ║
 ║   (ou: como fazer o bicho obedecer, kyun~)                                 ║
 ╚══════════════════════════════════════════════════════╝
 
@@ -10,7 +10,7 @@
 
 ─── ✦ ─── INTRODUÇÃO (presta atenção baka) ─── ✦ ───
 
-TipOS n é sistema operacional normal, n tem linux, n tem
+OvsbOS n é sistema operacional normal, n tem linux, n tem
 libc de verdade, n tem instalador bonitinho. Aqui vc
 escreve programa, compila, bota no disco e reza pra n
 dar page fault. É sobrevivência com ponteiro solto >_<
@@ -22,7 +22,7 @@ Spoiler kyun~: é tudo via memória compartilhada.
 ─── ✦ ─── COMO OS APP FUNCIONA ─── ✦ ───
 
 ┌────────────────────────────────────────────────────┐
-│  Toda app grafica no TipOS tem uma janelinha                         │
+│  Toda app grafica no OvsbOS tem uma janelinha                         │
 │  gerenciada pelo DISP. A conversa entre os dois                       │
 │  acontece numa pagina compartilhada em 0x500000.             │
 │  DISP cria processo filho, prepara a pagina, e o                        │
@@ -187,7 +187,7 @@ de cor qnd aperta tecla, kyun~
 ║  PASSO 2: CRIA/ATUALIZA O MAKEFILE                                         ║
 ╚══════════════════════════════════════════════════════╝
 
-    TIPOS_SDK ?= ../TipOS-staging
+    TIPOS_SDK ?= ../OvsbOS-staging
     ZIG ?= ~/.local/bin/zig
     CC = gcc
     GCC_INC := $(shell gcc -print-file-name=include)
@@ -245,14 +245,14 @@ de cor qnd aperta tecla, kyun~
 
     # roda no qemu:
     qemu-system-x86_64 -boot order=d \
-        -cdrom ../TipOS-staging/TipOS.iso \
-        -m 512M -drive file=../TipOS-staging/disk.img,format=raw \
+        -cdrom ../OvsbOS-staging/OvsbOS.iso \
+        -m 512M -drive file=../OvsbOS-staging/disk.img,format=raw \
         -serial stdio -vga std
 
   pra testar sem tela (só log):
     qemu-system-x86_64 -boot order=d \
-        -cdrom ../TipOS-staging/TipOS.iso \
-        -m 512M -drive file=../TipOS-staging/disk.img,format=raw \
+        -cdrom ../OvsbOS-staging/OvsbOS.iso \
+        -m 512M -drive file=../OvsbOS-staging/disk.img,format=raw \
         -serial file:/tmp/log.txt -display none -no-reboot
 
 ─── ✦ ─── PASSO A PASSO: APP EM C ─── ✦ ───
@@ -407,10 +407,10 @@ soa mais bonito, kyun~)
     ~/repo/disp/src/syscall.zig
 
   crt0 (ponto de entrada):
-    ~/repo/TipOS-staging/src/userland/libc/crt0.c
+    ~/repo/OvsbOS-staging/src/userland/libc/crt0.c
 
   linker script:
-    ~/repo/TipOS-staging/src/userland/libc/link.ld
+    ~/repo/OvsbOS-staging/src/userland/libc/link.ld
 
 ─── ✦ ─── CHECKLIST PRA N DAR PAGE FAULT ─── ✦ ───
 
@@ -457,7 +457,7 @@ soa mais bonito, kyun~)
 ─── ✦ ─── FINALMENTE, KYUN~ ─── ✦ ───
 
 é isso, aprendiz do reino! agora vc sabe criar app pro
-TipOS. n é difícil — só n escreve em memória q n é sua,
+OvsbOS. n é difícil — só n escreve em memória q n é sua,
 n confia no kmalloc, e lembra de marcar dirty = 1.
 
 se der certo, comemora com café ~

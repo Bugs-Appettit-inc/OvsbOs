@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🏆 **CONQUISTAS — TipOS**
+🏆 **CONQUISTAS — OvsbOS**
 
 Canal só de marco alcançado, sem enrolação.
 
@@ -19,7 +19,7 @@ Canal só de marco alcançado, sem enrolação.
 ```
 
 Exemplos:
-> "✅ TipOS boota no hardware real (não só QEMU)!"
+> "✅ OvsbOS boota no hardware real (não só QEMU)!"
 > "✅ TAB autocomplete com longest-common-prefix funcional no shell"
 > "✅ PR merged: FAT32 rename() implementado"
 > "👋 Novo membro na equipe: @nome — vai atacar o IPC Mach"

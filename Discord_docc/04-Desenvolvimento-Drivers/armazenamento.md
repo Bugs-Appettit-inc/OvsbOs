@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-💾 **ARMAZENAMENTO — TipOS**
+💾 **ARMAZENAMENTO — OvsbOS**
 
 **Driver ATA PIO — já implementado** (`OvsbMkM/src/drivers/ata.c`):
 - Portas `0x1F0–0x1F7` (primary IDE, master)
@@ -37,7 +37,7 @@ Estrutura no disco (imagem de 64MB):
 **Em aberto:**
 - Driver **AHCI** (SATA) — futuro
 - Driver **NVMe** — futuro
-- **Ext2** — futuro, alternativa ao FAT32 avaliada e adiada (`tipos-dev-stack.md`: "FAT32 é mais fácil de implementar")
+- **Ext2** — futuro, alternativa ao FAT32 avaliada e adiada (`ovsbos-dev-stack.md`: "FAT32 é mais fácil de implementar")
 - **VFS layer** real (`mount`, `umount`, `fstab`, `tmpfs`, `devfs`, `procfs`) — hoje o acesso a arquivo é direto via FAT32, sem camada de abstração
 
 Bugs de leitura/escrita em disco, reporta aqui com log serial (ver #logs).

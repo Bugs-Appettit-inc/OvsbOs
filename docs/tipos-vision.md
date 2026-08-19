@@ -5,7 +5,7 @@
 > Para a verdade de hoje: leia `README.md`, `AGENTS.md` e `KERNEL.md`.
 
 ---
-# TipOS — Visão do Sistema
+# OvsbOS — Visão do Sistema
 
 ## 1. Arquitetura Geral
 
@@ -73,13 +73,13 @@ Fundo preto. Simples, eficaz, fácil de implementar no VGA.
 |--------|-----------------|----------|
 | **OvsbMkM** (Bugsappetit.inc) | Ring 0, hardware, syscalls | Boot, IDT, PIC, ATA, FAT32, memoria |
 | **Ovsb.OS** (Bugsappetit.inc) | Shell, comandos, init | ls, cat, touch, rm, edit |
-| **TipOS** (nossa) | Userland, apps, visão do sistema | TUI, jogos, ferramentas, dock |
+| **OvsbOS** (nossa) | Userland, apps, visão do sistema | TUI, jogos, ferramentas, dock |
 
-O kernel e o Ovsb.OS são do Bugsappetit.inc. O TipOS é a camada superior que
+O kernel e o Ovsb.OS são do Bugsappetit.inc. O OvsbOS é a camada superior que
 define a experiência do usuário, os aplicativos e a filosofia do sistema.
 
 ## 6. Licença
 
 - Kernel OvsbMkM e Ovsb.OS: licença do Bugsappetit.inc (perguntar)
-- TipOS userland e apps: MIT
+- OvsbOS userland e apps: MIT
 - Camada Dock: MIT (clean room, sem código GPL)

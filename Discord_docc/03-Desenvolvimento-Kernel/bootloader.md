@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-⚙️ **BOOTLOADER — TipOS**
+⚙️ **BOOTLOADER — OvsbOS**
 
 **Arquivo:** `OvsbMkM/src/kernel/boot64.asm` (87 linhas) + `linker.ld` (31 linhas)
 
@@ -20,11 +20,11 @@ MBR → GRUB stage 1+2 → kernel.elf (Multiboot2) → boot64.asm → kmain()
 
 ---
 
-**Status:** ✅ 100% funcional, considerado "pronto" na migração pro TipOS (vai direto pra `kernel/arch/x86_64/boot.asm`).
+**Status:** ✅ 100% funcional, considerado "pronto" na migração pro OvsbOS (vai direto pra `kernel/arch/x86_64/boot.asm`).
 
 **Em aberto / discussão:**
 - Suporte a UEFI (hoje só BIOS Legacy via GRUB)
-- Avaliar migrar de GRUB pra **Limine** se precisar de UEFI/GOP nativo (`tipos-dev-stack.md`)
+- Avaliar migrar de GRUB pra **Limine** se precisar de UEFI/GOP nativo (`ovsbos-dev-stack.md`)
 - Multiboot2 vs. bootloader próprio
 
 Se for mexer no boot, testa sempre com `make debug` (QEMU + GDB parado em `kmain`) antes de commitar — um erro aqui trava o boot inteiro sem log nenhum.

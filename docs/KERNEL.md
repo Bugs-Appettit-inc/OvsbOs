@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-# TipOS Kernel — Documentação Completa
+# OvsbOS Kernel — Documentação Completa
 
 > **Nível:** Bizarro. Até uma pedra consegue continuar o desenvolvimento.
 >
@@ -102,7 +102,7 @@ void kmain(uint32_t magic, uint32_t mb_info) {
     ata_init();              // 14. ATA PIO init (primary master)
     fat32_init();            // 15. Lê BPB, monta FAT32
     disp_init();             // 16. Compositor gráfico (se fb ativo)
-    vga_puts("TipOS...\n");  // 17. Mensagens de boot
+    vga_puts("OvsbOS...\n");  // 17. Mensagens de boot
     shell_loop();            // 18. → SHELL (nunca retorna)
 }
 ```
@@ -294,7 +294,7 @@ Gate:     int 0x80 (DPL=3, chamável de userland)
 > **Linux *at (issue #53):** dirfd suportado = `AT_FDCWD` (cwd atual). Outros dirfds
 > retornam -1 por enquanto — o FAT32 não tem fd de diretório. Os números 90-93, 95,
 > 99 (chmod/fchmod/chown/fchown/umask/sysinfo) colidem com os destinos do
-> `linux_to_tipos` (sched_yield/dup2/recvmsg/fcntl/tkill/sched_setaffinity), então
+> `linux_to_ovsbos` (sched_yield/dup2/recvmsg/fcntl/tkill/sched_setaffinity), então
 > os *at que precisam desses números foram mapeados para destinos livres 402-407.
 
 | 14 | `rt_sigprocmask` | Bloqueia/desbloqueia sinais (stub aceito) | syscall.c:1328 |
@@ -342,7 +342,7 @@ Stubs "realistas": devolvem valores corretos mas sem trabalho pesado. Destravam 
 
 | Linux # | Nome | Comportamento |
 |---------|------|---------------|
-| 63 | `uname` | sysname=Linux, release=TipOS, machine=x86_64 |
+| 63 | `uname` | sysname=Linux, release=OvsbOS, machine=x86_64 |
 | 318 | `getrandom` | preenche com xorshift (não cripto) |
 | 229 | `clock_getres` | resolução 10ms (PIT 100Hz) |
 | 98 | `getrusage` | struct zerada |
@@ -360,7 +360,7 @@ Stubs "realistas": devolvem valores corretos mas sem trabalho pesado. Destravam 
 
 Notas:
 - **O_NONBLOCK**: `fds[0].flags & O_NONBLOCK` faz o `read` de stdin retornar `-EAGAIN` (`-11`) quando não há tecla — weston configura o stdin em nonblock no boot.
-- **Colisões resolvidas no `syscall_linux.zig`**: `dup2`(33)→91, `recvmsg`(47)→92, `fcntl`(54→na real é 72, identity)→, `rt_sigprocmask`(134)→94, `tkill`(200)→95, `futex`(202)→96, `sched_setaffinity`(203)→99, `sched_getaffinity`(204)→101, `tgkill`(234)→103 — pois os números originais colidem com syscalls TipOS. **Importante**: `dup` no Linux x86_64 é **32**, não 23 (23 é `select`).
+- **Colisões resolvidas no `syscall_linux.zig`**: `dup2`(33)→91, `recvmsg`(47)→92, `fcntl`(54→na real é 72, identity)→, `rt_sigprocmask`(134)→94, `tkill`(200)→95, `futex`(202)→96, `sched_setaffinity`(203)→99, `sched_getaffinity`(204)→101, `tgkill`(234)→103 — pois os números originais colidem com syscalls OvsbOS. **Importante**: `dup` no Linux x86_64 é **32**, não 23 (23 é `select`).
 - **pipe**: 8 buffers globais (`MAX_PIPES`), `pipe_idx` liga os 2 fds; `close_fd` libera o buffer quando um fd do par fecha.
 
 ### 5.4 Fluxo de Syscall
@@ -713,7 +713,7 @@ fat32_boot_t (boot sector struct) → lê do setor 0
 ### 10.5 Estrutura de Diretório no Disco
 
 ```
-TipOS usa disk.img de 64MB FAT32.
+OvsbOS usa disk.img de 64MB FAT32.
 Partições:
   /BIN/       → binários Mach-O (GRAPHY, etc)
   /USR/BIN/   → PATH secundário (futuro)
@@ -1403,14 +1403,14 @@ make run  # mostra VGA + serial no terminal
 
 O kernel envia logs para porta serial COM1 (`0x3F8`). Para capturar:
 ```bash
-qemu-system-x86_64 -cdrom TipOS.iso -drive file=disk.img,format=raw -serial stdio
+qemu-system-x86_64 -cdrom OvsbOS.iso -drive file=disk.img,format=raw -serial stdio
 ```
 
 ### 21.2 QEMU + GDB
 
 ```bash
 # Terminal 1:
-qemu-system-x86_64 -cdrom TipOS.iso -drive file=disk.img,format=raw -s -S
+qemu-system-x86_64 -cdrom OvsbOS.iso -drive file=disk.img,format=raw -s -S
 
 # Terminal 2:
 gdb -ex "target remote :1234" \
@@ -1487,7 +1487,7 @@ vga[2] = (0x0E << 8) | ('0' + (num % 10));
 
 ### 23.1 Visão Geral
 
-O `elf64.zig` carrega binários **ELF64** para execução nativa no TipOS,
+O `elf64.zig` carrega binários **ELF64** para execução nativa no OvsbOS,
 suportando especificamente **musl-linked static PIE** (Position Independent
 Executable). O loader cria um **child PML4** por processo e mapeia os segmentos
 PT_LOAD com páginas de **2MB (hugepages)**.
@@ -1534,18 +1534,18 @@ acessar a memória do ELF carregado.
 
 ### 24.1 Visão Geral
 
-Para executar binários Linux não-modificados, o TipOS implementa uma **camada
+Para executar binários Linux não-modificados, o OvsbOS implementa uma **camada
 de tradução de syscalls** que mapeia números de syscall Linux para os números
-nativos do TipOS, mais stubs para syscalls Linux não presentes no TipOS nativo.
+nativos do OvsbOS, mais stubs para syscalls Linux não presentes no OvsbOS nativo.
 
 ### 24.2 Syscall Translation (`syscall_linux.zig`)
 
-| Linux # | Nome | → TipOS # | Notas |
+| Linux # | Nome | → OvsbOS # | Notas |
 |---------|------|-----------|-------|
 | 0 | read | 3 | Mapeado diretamente |
 | 1 | write | 4 | Mapeado diretamente |
 | 12 | brk | 12 | Stub (retorna sucesso) |
-| 60 | exit | 1 | Linux exit → TipOS exit |
+| 60 | exit | 1 | Linux exit → OvsbOS exit |
 | 186 | set_tid_address | 186 | Stub (retorna 0) |
 | 218 | set_tid_address (alt) | 186 | Stub |
 | 228 | clock_gettime | 116 | RTC-based |
@@ -1605,7 +1605,7 @@ escreve no stdout e sai com código 0.
 | Arquivo | Função |
 |---------|--------|
 | `OvsbMk/kernel/elf64.zig` | ELF64 loader (PML4 child, 2MB hugepages) |
-| `OvsbMk/kernel/syscall_linux.zig` | Tradução Linux→TipOS |
+| `OvsbMk/kernel/syscall_linux.zig` | Tradução Linux→OvsbOS |
 | `OvsbMk/kernel/switch.asm` | FS.base (MSR_FS_BASE) save/restore |
 | `OvsbMk/kernel/process.c` | `setup_linux_user_stack()` aux vector |
 | `OvsbMk/kernel/memory.c` | `clone_identity_tables()`, U/S management |
@@ -1625,7 +1625,7 @@ escreve no stdout e sai com código 0.
 │   │   ├── idt.c / idt.asm    # IDT setup + ISR/IRQ stubs
 │   │   ├── syscall.c          # 30 syscalls (XNU convention)
 │   │   ├── syscall_entry.asm  # Entry point da syscall
-│   │   ├── syscall_linux.zig  # Tradução Linux→TipOS (compat)
+│   │   ├── syscall_linux.zig  # Tradução Linux→OvsbOS (compat)
 │   │   ├── memory.c           # Bump + buddy (4KB frames) + SLAB
 │   │   ├── vm_map.c           # Mapeamentos virtuais (mmap_user)
 │   │   ├── process.c          # PCB (64 slots), spawn/exit/waitpid, aux vector
@@ -1670,4 +1670,4 @@ src/userland/                 ← Userland (ring 3) — + repos irmãos ../disp,
 
 > **"Um sistema operacional não é sobre o que você pode fazer — é sobre o que você pode construir."**
 >
-> — TipOS Team, 2026
+> — OvsbOS Team, 2026

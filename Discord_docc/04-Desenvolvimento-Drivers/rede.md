@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🌐 **REDE — TipOS**
+🌐 **REDE — OvsbOS**
 
 **Status atual: não existe.** Nenhum driver de rede implementado ainda. Feature de fase avançada (Fase 4 do roadmap em equipe, 4 semanas estimadas).
 
@@ -8,7 +8,7 @@
 **Plano:**
 - Driver **Intel e1000** (funciona bem em QEMU, boa pra desenvolvimento)
 - Driver **RTL8139** (comum em hardware real mais antigo)
-- **lwIP** portado como servidor **user-space** (decisão em `tipos-dev-stack.md` — evita reimplementar TCP/IP do zero; alternativa "stack própria" foi descartada por ser trabalho demais)
+- **lwIP** portado como servidor **user-space** (decisão em `ovsbos-dev-stack.md` — evita reimplementar TCP/IP do zero; alternativa "stack própria" foi descartada por ser trabalho demais)
 - Socket syscalls: `socket`, `bind`, `listen`, `connect`, `send`, `recv`
 - DHCP client, DNS resolver (`/etc/resolv.conf`), `ping`, `wget`/`curl`
 

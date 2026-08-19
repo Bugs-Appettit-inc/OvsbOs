@@ -1,9 +1,9 @@
 @startuml
 ' moe moe kyun <3
-' TipOS — sequência de boot
+' OvsbOS — sequência de boot
 ' GRUB2 → boot64.asm → kmain → init completo → shell_init (roda HELLO e DISP)
 
-title Boot do TipOS — do GRUB ao prompt
+title Boot do OvsbOS — do GRUB ao prompt
 
 skinparam shadowing false
 skinparam defaultFontName "SansSerif"
@@ -19,7 +19,7 @@ participant "shell.c\n(shell_init)" as sh
 participant "elf64.zig" as elf
 participant "disp-wm\n(../disp)" as disp
 
-qemu -> grub : boots TipOS.iso (Multiboot2)
+qemu -> grub : boots OvsbOS.iso (Multiboot2)
 grub -> boot : carrega kernel.elf\n(multiboot2 /boot/kernel.elf)
 activate boot
 boot -> boot : 32-bit → long mode\nGDT, PML4 identity (1GB)\nrecebe multiboot info
