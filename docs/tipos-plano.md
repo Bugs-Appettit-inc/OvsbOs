@@ -5,7 +5,7 @@
 > Para a verdade de hoje: leia `README.md`, `AGENTS.md` e `KERNEL.md`.
 
 ---
-# TipOS — Plano de Desenvolvimento
+# OvsbOS — Plano de Desenvolvimento
 
 Base: OvsbMkM (https://github.com/Bugsappetit-inc/OvsbMkM) — kernel 64-bit com boot, IDT, PS/2, VGA, syscalls XNU, Mach-O.
 
@@ -20,7 +20,7 @@ O código original do OvsbMkM **já funciona** — boota no QEMU, mostra "OVSBMK
 ### Estrutura de diretórios (simplificada)
 
 ```
-tipos/
+ovsbos/
 ├── kernel/                    # Ring 0
 │   ├── arch/x86_64/
 │   │   ├── boot.asm
@@ -42,7 +42,7 @@ tipos/
 │   └── edit.c                  # Novo — editor de texto
 ├── libs/
 │   ├── libc/                   # printf, sprintf, strlen, mem*
-│   └── libtipos/                # syscall wrappers
+│   └── libovsbos/                # syscall wrappers
 ├── build/
 │   ├── Makefile
 │   ├── kernel.ld
@@ -65,19 +65,19 @@ tipos/
 | SMC / NVRAM | 🔸 Stub | Manter como placeholder |
 | Linker / Makefile / GRUB | ✅ Pronto | Copiar, ajustar caminhos |
 
-**A primeira versão do TipOS é o OvsbMkM reorganizado — não reescrito.**
+**A primeira versão do OvsbOS é o OvsbMkM reorganizado — não reescrito.**
 
 ---
 
 ## 3. Roadmap (uma pessoa)
 
 ### Marco 1 — Organização (1-2 dias)
-- [ ] Criar estrutura `tipos/` com diretórios
+- [ ] Criar estrutura `ovsbos/` com diretórios
 - [ ] Copiar arquivos do OvsbMkM para os lugares certos
 - [ ] Separar VGA de kmain.c → `drivers/vga.c`
 - [ ] Separar shell de kmain.c → `apps/shell.c`
 - [ ] Adaptar Makefile com novos caminhos
-- [ ] Testar `make run` — mostrar "TipOS" no VGA
+- [ ] Testar `make run` — mostrar "OvsbOS" no VGA
 
 ### Marco 2 — Processos e IPC (1-2 semanas)
 - [ ] IPC mínimo: portas e mensagens (base Mach)
@@ -103,7 +103,7 @@ tipos/
 
 ### Marco 6 — Carregador ELF (1-2 semanas)
 - [x] **ELF loader** — `elf64.zig` carrega musl static PIE em child PML4 (2MB hugepages)
-- [x] **Syscall translation** — `syscall_linux.zig` mapeia Linux→TipOS (read=0, write=1, exit_group=231, etc.)
+- [x] **Syscall translation** — `syscall_linux.zig` mapeia Linux→OvsbOS (read=0, write=1, exit_group=231, etc.)
 - [x] **Auxiliary vector** — `setup_linux_user_stack()` empurra AT_RANDOM, AT_PAGESZ, AT_SECURE, AT_PHNUM, AT_PHENT, AT_PHDR
 - [x] **TLS via FS.base** — `switch.asm` salva/restaura MSR_FS_BASE por processo
 - [x] **Demo `exec HELLO`** — "Hello from musl ELF!"
@@ -124,6 +124,6 @@ tipos/
 1. Cria a estrutura
 2. Move os arquivos
 3. Ajusta nomes
-4. `make run` mostra a splash "TipOS" + prompt
+4. `make run` mostra a splash "OvsbOS" + prompt
 
 Depois disso, decidir qual marco atacar: IPC? Terminal? Editor?

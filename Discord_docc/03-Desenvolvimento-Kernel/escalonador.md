@@ -1,7 +1,7 @@
 <!-- moe moe kyun <3 -->
-⏱️ **ESCALONADOR — TipOS**
+⏱️ **ESCALONADOR — OvsbOS**
 
-**Status atual: não existe.** O TipOS hoje não tem múltiplos processos rodando concorrentemente — é um kernel monolítico com um único fluxo de execução (shell + o que ele chama).
+**Status atual: não existe.** O OvsbOS hoje não tem múltiplos processos rodando concorrentemente — é um kernel monolítico com um único fluxo de execução (shell + o que ele chama).
 
 O que já existe é o **timer**, que vai servir de base pro escalonador:
 
@@ -21,7 +21,7 @@ volatile uint64_t timer_ticks = 0; // incrementa a ~100Hz via IRQ0
 
 ---
 
-**Decisão já tomada (`tipos-dev-stack.md`):**
+**Decisão já tomada (`ovsbos-dev-stack.md`):**
 > Round-robin com prioridades — começar simples. Alternativas descartadas por ora: lottery scheduling, O(1).
 
 **Plano (Fase 2, junto com #processos):**
@@ -30,7 +30,7 @@ volatile uint64_t timer_ticks = 0; // incrementa a ~100Hz via IRQ0
 - Troca de contexto: salvar/restaurar registradores (ainda não implementado — depende de PCB existir)
 - Fila de prontos (READY) e bloqueados (BLOCKED)
 - Prioridades + nice
-- CPU affinity — só relevante quando/se o TipOS for multi-core (bem no futuro)
+- CPU affinity — só relevante quando/se o OvsbOS for multi-core (bem no futuro)
 
 **Bloqueio direto:** escalonador depende do PCB (#processos) existir primeiro — sem estrutura de processo, não tem o que escalonar.
 

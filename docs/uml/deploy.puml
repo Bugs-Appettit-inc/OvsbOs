@@ -1,7 +1,7 @@
 @startuml
 ' moe moe kyun <3
-' TipOS — deploy: como o bicho roda (build → QEMU)
-' make all → TipOS.iso; make userland → disk.img; make run → QEMU
+' OvsbOS — deploy: como o bicho roda (build → QEMU)
+' make all → OvsbOS.iso; make userland → disk.img; make run → QEMU
 
 title Deploy — build e execução
 
@@ -20,9 +20,9 @@ node "Host Linux" as host {
 }
 
 node "QEMU\n(qemu-system-x86_64)" as qemu {
-    artifact "TipOS.iso\n(GRUB2 + kernel.elf)" as iso
+    artifact "OvsbOS.iso\n(GRUB2 + kernel.elf)" as iso
     artifact "disk.img\n(FAT32 64MB)" as disk
-    node "TipOS\n(ring 0 + ring 3)" as tipos {
+    node "OvsbOS\n(ring 0 + ring 3)" as ovsbos {
     }
 }
 
@@ -31,11 +31,11 @@ usrc --> disk : mcopy ::/BIN/...
 isrc --> disk : mcopy (DISP, TERM)
 qemu --> iso : -cdrom
 qemu --> disk : -drive file=disk.img
-iso --> tipos : boot
-disk --> tipos : FAT32 (leitura/escrita)
+iso --> ovsbos : boot
+disk --> ovsbos : FAT32 (leitura/escrita)
 
 artifact "make run" as run
 run --> qemu : -m 512M -serial stdio
 artifact "make run-test" as runtest
-runtest --> qemu : headless, log em\n/tmp/tipos-boot.log
+runtest --> qemu : headless, log em\n/tmp/ovsbos-boot.log
 @enduml

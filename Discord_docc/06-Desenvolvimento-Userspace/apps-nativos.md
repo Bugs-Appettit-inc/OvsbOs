@@ -1,10 +1,10 @@
 <!-- moe moe kyun <3 -->
-📦 **APPS NATIVOS — TipOS**
+📦 **APPS NATIVOS — OvsbOS**
 
 **Post inicial: `graphy` rodando**
 [anexar screenshot com syntax highlight ativo]
 
-`graphy` é o editor TUI do TipOS (~620 linhas, `src/userland/progs/graphy.c`), roda como Mach-O userland:
+`graphy` é o editor TUI do OvsbOS (~620 linhas, `src/userland/progs/graphy.c`), roda como Mach-O userland:
 
 **Atalhos:** ^O salvar · ^X sair · ^G toggle help · ^F find · ^S/^R replace global · ^J go to line · ^Z undo (512 ops) · ^W cut word · ^Y paste · ^K kill line · ^T toggle buffer · ^C command mode · F2 toggle números de linha
 
@@ -14,12 +14,12 @@
 
 ---
 
-**Como escrever um app novo** (`tipos-tutorial.md`):
+**Como escrever um app novo** (`ovsbos-tutorial.md`):
 
 ```c
 #include <stdio.h>
 int main(int argc, char **argv) {
-    printf("Hello, TipOS!\n");
+    printf("Hello, OvsbOS!\n");
     return 0;
 }
 ```

@@ -1,6 +1,6 @@
 # docs/ — Índice da Documentação
 
-> moe moe kyun <3 — aqui mora a sabedoria do TipOS. Leia o que é **atual** primeiro;
+> moe moe kyun <3 — aqui mora a sabedoria do OvsbOS. Leia o que é **atual** primeiro;
 > os docs marcados como **histórico** contam o passado (não refletem o código de hoje).
 
 ## 📖 Por onde começar (novato)
@@ -11,20 +11,20 @@
 | 2 | `../AGENTS.md` | Contexto rápido + como buildar + convenções |
 | 3 | `KERNEL.md` | **A bíblia do kernel** — boot, IDT, syscalls, drivers, FS, shell, ELF64 |
 | 4 | `KANBAN.md` | **Board + regras de fluxo** (Kanban/Lean + XP, squads, sprints) |
-| 5 | `tipos-tutorial.md` | Como escrever/compilar/rodar programas pro TipOS (libc própria, Mach-O) |
+| 5 | `ovsbos-tutorial.md` | Como escrever/compilar/rodar programas pro OvsbOS (libc própria, Mach-O) |
 | 6 | `../TUTORIAL_APPS.txt` | Protocolo dos apps gráficos (DISP, memória compartilhada) |
 
 > **Programas nativos novos?** O tutorial de apps mora no repo
-> **TipGroup-inc/TipOS-programs** (README dele): fluxo Zig freestanding → ELF
-> (sem libc) + o fluxo C com libc própria. O `tipos-tutorial.md` abaixo é a
+> **TipGroup-inc/OvsbOS-programs** (README dele): fluxo Zig freestanding → ELF
+> (sem libc) + o fluxo C com libc própria. O `ovsbos-tutorial.md` abaixo é a
 > versão local/legada do fluxo C.
 
 ## ✅ Atual
 
 - **`KERNEL.md`** — kernel em detalhe (arquitetura, boot, IDT, syscalls, VGA/VESA,
   teclado, ATA, FAT32, PIT, RTC, shell, userland, ELF64 loader, debugging). ~1570 linhas de amor.
-- **`tipos-tutorial.md`** — passo a passo de programas userland (libc própria, Mach-O).
-- **`tipos-dev-stack.md`** — fluxo de desenvolvimento e stack (ferramentas, build).
+- **`ovsbos-tutorial.md`** — passo a passo de programas userland (libc própria, Mach-O).
+- **`ovsbos-dev-stack.md`** — fluxo de desenvolvimento e stack (ferramentas, build).
 
 ## 📊 UML — Diagramas do projeto
 
@@ -44,14 +44,14 @@ Exemplos diretos: `![Arquitetura](uml/arquitetura.png)`
 
 ## 🕰️ Histórico / arquivado
 
-> Documentos da época da migração OvsbMkM → TipOS, do planejamento ou de subsistemas
+> Documentos da época da migração OvsbMkM → OvsbOS, do planejamento ou de subsistemas
 > que já morreram. Servem de contexto histórico — **não** use como referência de código.
 
 - **`Kora os Doc v1.md`** — plano de desenvolvimento do projeto (antes se chamava "Kora os").
-- **`tipos-plano.md`** — plano de migração OvsbMkM → TipOS (checklist concluída).
-- **`tipos-vision.md`** — visão do sistema na fase de organização.
-- **`tipos-equipes-e-estrutura.md`** — organização do código por equipes (fase inicial).
-- **`tipos-doca.md`** — arquitetura da **Doca (Dock HAL)**; `src/dock` foi removido do repo.
+- **`ovsbos-plano.md`** — plano de migração OvsbMkM → OvsbOS (checklist concluída).
+- **`ovsbos-vision.md`** — visão do sistema na fase de organização.
+- **`ovsbos-equipes-e-estrutura.md`** — organização do código por equipes (fase inicial).
+- **`ovsbos-doca.md`** — arquitetura da **Doca (Dock HAL)**; `src/dock` foi removido do repo.
 
 ## 🧹 Manutenção
 

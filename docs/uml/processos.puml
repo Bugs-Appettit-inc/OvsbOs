@@ -1,6 +1,6 @@
 @startuml
 ' moe moe kyun <3
-' TipOS — ciclo de vida dos processos (PCB estático, 64 slots, scheduler RR)
+' OvsbOS — ciclo de vida dos processos (PCB estático, 64 slots, scheduler RR)
 
 title Ciclo de vida de um processo
 

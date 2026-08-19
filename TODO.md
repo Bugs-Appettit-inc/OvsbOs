@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-# TipOS — TODO Supremo
+# OvsbOS — TODO Supremo
 
 > **Visão:** Sistema operacional TUI-first focado em desenvolvimento de software
 > e uso corporativo. Experiência tipo IDE integrada (editor + terminal + compilador + git),
@@ -18,7 +18,7 @@
 | 🔸 | Parcial / stub |
 | ❌ | Não existe |
 | 📌 | Prioridade máxima |
-| 💡 | Diferencial competitivo do TipOS |
+| 💡 | Diferencial competitivo do OvsbOS |
 
 ---
 
@@ -120,7 +120,7 @@
 | Top-level Makefile (kernel + userland + ISO + run + clean) | ✅ |
 | GRUB config (Multiboot2, timeout=0) | ✅ |
 | 64MB FAT32 disk.img | ✅ |
-| QEMU run (TipOS.iso + disk.img + serial) | ✅ |
+| QEMU run (OvsbOS.iso + disk.img + serial) | ✅ |
 | QEMU run-curses | ✅ |
 | `make run` → boots in <5s | ✅ |
 
@@ -363,7 +363,7 @@
 - [ ] **256-color palette** (hoje só 16 cores VGA)
 - [ ] **Hyperlinks** (OSC 8 — clicar em URL/file:line) 💡
 - [ ] **Image preview** (sixel ou kitty protocol) 💡
-- [ ] **Config file** (~/.tiposrc) — keybindings, cores, fontes
+- [ ] **Config file** (~/.ovsbosrc) — keybindings, cores, fontes
 
 ### 6.2 Tiling Window Manager 💡
 
@@ -441,7 +441,7 @@
 
 ## 🚀 9. SONHOS / DIFERENCIAIS (6+ meses)
 
-*Recursos que fariam o TipOS ser único.*
+*Recursos que fariam o OvsbOS ser único.*
 
 ### 9.1 IDE Nativa Integrada 💡
 
@@ -467,12 +467,12 @@
 
 - [ ] **Virtualização nativa** (VT-x/AMD-V)
 - [ ] **Rodar Linux como VM convidada** com pass-through de GPU
-- [ ] **`/vm windows.iso`** — rodar Windows dentro do TipOS
+- [ ] **`/vm windows.iso`** — rodar Windows dentro do OvsbOS
 
 ### 9.4 Multi-arch
 
 - [x] **ELF loader** — `elf64.zig` carrega musl static PIE em child PML4 (2MB hugepages)
-- [x] **Syscall translation layer** — `syscall_linux.zig` mapeia Linux→TipOS (read=0→3, write=1→4, exit_group=231→212)
+- [x] **Syscall translation layer** — `syscall_linux.zig` mapeia Linux→OvsbOS (read=0→3, write=1→4, exit_group=231→212)
 - [x] **Auxiliary vector** — `setup_linux_user_stack()` empurra AT_RANDOM, AT_PAGESZ, AT_SECURE, AT_PHNUM, AT_PHENT, AT_PHDR
 - [x] **TLS** — FS.base save/restore (`switch.asm`), `arch_prctl` via MSR_FS_BASE
 - [x] **U/S bit mgmt** — `clone_identity_tables` strips U/S; spawn paths re-add for code/stack
@@ -531,7 +531,7 @@ Ring 3 / Proteção ───────────┬────────
 | **v0.7.4** | ELF64 loader (musl static PIE) + Linux syscall translation + TLS FS.base + aux vector + `exec HELLO` demo | 4 semanas |
 | **v0.8** | Terminal multiplexado (tabs/split/scrollback) + clipboard | 12 semanas |
 | **v0.9** | Rede (TCP/IP + SSH + Git) | 20 semanas |
-| **v1.0** | Auto-hospedagem: compilar TipOS dentro do TipOS | 24 semanas |
+| **v1.0** | Auto-hospedagem: compilar OvsbOS dentro do OvsbOS | 24 semanas |
 | **v2.0** | ext2, VFS, mount, permissões, login, corporate ready | 36 semanas |
 
 ---
@@ -553,7 +553,7 @@ Ring 3 / Proteção ───────────┬────────
 | Já | 19 comandos shell + auto-search /BIN/ |
 | Já | Compositor gráfico 320x200 |
 | Já | Pipe build C→Mach-O + install no disk.img |
-| HOJE | Tutorial completo (docs/tipos-tutorial.md) |
+| HOJE | Tutorial completo (docs/ovsbos-tutorial.md) |
 | HOJE | **RTC driver** (CMOS, gettimeofday real, date, uptime) |
 | HOJE | **PIT timer** (100Hz, timer_ticks, sleep_ms) |
 | HOJE | **Keyboard repeat** (500ms delay, 33Hz rate, make/break tracking) |
@@ -602,7 +602,7 @@ Ring 3 / Proteção ───────────┬────────
 | **HOJE** | **ATA timeout** — polling loop com 100k iterações, não trava se primary master vazio |
 | **HOJE** | **Makefile corrigido** — disk.img como ATA primary master (`-drive file=... -boot order=d`) |
 | **HOJE** | **crt0 exit** — _start() chama exit(ret) no final (syscall SYS_exit) |
-| **HOJE** | **Commit + push GitHub** — d1741b0 no TipGroup-inc/TipOS-staging.git |
+| **HOJE** | **Commit + push GitHub** — d1741b0 no TipGroup-inc/OvsbOS-staging.git |
 | **HOJE** | **munmap_all_user() + fds_cleanup() reais no SYS_exit** — limpa todo bitmap + FD table ao sair de ring 3 |
 | **HOJE** | **Background jobs** — parsing de `&`, job table (16 slots), builtins `jobs`/`fg`/`bg` |
 | **HOJE** | **Makefile raiz delegado p/ OvsbMkM/** — elimina duplicação de regras |
@@ -641,7 +641,7 @@ Ring 3 / Proteção ───────────┬────────
 | **v0.7.4.0** | **Bugfix `mapped[32]`** — VA|PA OR corrompia phys addr; fix `(va>>32)<<32 | phys` |
 | **v0.7.4.0** | **Linux syscall stubs** — `arch_prctl` (TLS via FS.base MSR), `brk`, `exit_group` (231→212), `set_tid_address`, `clock_gettime`, `nanosleep` |
 | **v0.7.4.0** | **Auxiliary vector** — `setup_linux_user_stack()` empurra AT_RANDOM, AT_PAGESZ, AT_SECURE, AT_PHNUM, AT_PHENT, AT_PHDR |
-| **v0.7.4.0** | **Syscall translation** — `syscall_linux.zig` mapeia Linux→TipOS (read=0→3, write=1→4, exit_group=231→212, etc.) |
+| **v0.7.4.0** | **Syscall translation** — `syscall_linux.zig` mapeia Linux→OvsbOS (read=0→3, write=1→4, exit_group=231→212, etc.) |
 | **v0.7.4.0** | **FS.base save/restore** — `switch.asm` salva/restaura MSR_FS_BASE para TLS por processo |
 | **v0.7.4.0** | **U/S bit management** — `clone_identity_tables` strips U/S; spawn paths re-add explicitamente |
 | **v0.7.4.0** | **Demo `exec HELLO`** — "Hello from musl ELF!" (shell_init runs HELLO first, then DISP) |
@@ -686,7 +686,7 @@ Ring 3 / Proteção ───────────┬────────
 - [x] graphy: bracket matching
 - [x] shell: background jobs (&, jobs, fg, bg)
 - [x] shell: ^C interrompe comando atual
-- [ ] TUI lib: suporte a config file (~/.tiposrc)
+- [ ] TUI lib: suporte a config file (~/.ovsbosrc)
 - [ ] TUI lib: menu bar widget, list selector
 - [ ] TUI lib: scrollback history buffer por janela
 
