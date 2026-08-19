@@ -15,7 +15,7 @@ assignees: []
 
 **Log / saída**
 ```
-cola o log aqui (make run-test salva em /tmp/tipos-boot.log)
+cola o log aqui (make run-test salva em /tmp/ovsbos-boot.log)
 ```
 
 **Onde mora** (chuta pelo menos um):

@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-⌨️ **ENTRADA — TipOS**
+⌨️ **ENTRADA — OvsbOS**
 
 **Teclado PS/2 — já implementado** (`keyboard.c` + `keyboard_asm.asm`):
 - Controlador PS/2: dados `0x60`, status `0x64`, **IRQ1 (vetor 33)**
@@ -16,7 +16,7 @@ Ajustável em `keyboard.c` via `REPEAT_DELAY` e `REPEAT_RATE`.
 
 > ⚠️ **Importante:** a leitura de `0x60` é feita **exclusivamente pelo ISR**. `keyboard_read()` NÃO faz polling direto da porta — isso já causou duplicação de caracteres no passado (ISR e polling lendo o mesmo scancode). Se for mexer aqui, não reintroduza polling da porta.
 
-**Sequências VT100 emitidas** (setas, Home/End, PgUp/PgDn, Ins/Del, F1-F12) — tabela completa no #shell e em `tipos-tutorial.md`.
+**Sequências VT100 emitidas** (setas, Home/End, PgUp/PgDn, Ins/Del, F1-F12) — tabela completa no #shell e em `ovsbos-tutorial.md`.
 
 ---
 

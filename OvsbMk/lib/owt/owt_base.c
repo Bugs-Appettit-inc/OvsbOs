@@ -9,7 +9,7 @@
  * por enquanto~ torce pra nao ter 1000 widgets aninhados!). kyun! <3
  *
  * NOTA IMPORTANTE: Antes usava static pool (owt_widget_t widgets[64])
- * que alocava sizeof(owt_widget_t) pra todo mundo e os subtipos
+ * que alocava sizeof(owt_widget_t) pra todo mundo e os subovsbos
  * estouravam a memoria pq sao maiores. Arrumei: agora usa kmalloc
  * com o tamanho real do subtipo. E o array de filhos kids era um
  * ponteiro pra static global (todo mundo compartilhava o mesmo vetor,

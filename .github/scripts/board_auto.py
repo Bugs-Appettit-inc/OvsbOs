@@ -11,7 +11,7 @@ PROJECT_ID = os.environ["PROJECT_ID"]
 FIELD_ID = os.environ["FIELD_ID"]
 BACKLOG = os.environ["BACKLOG"]
 CONCLUIDO = os.environ["CONCLUIDO"]
-REPO = "TipGroup-inc/TipOS-staging"
+REPO = "TipGroup-inc/OvsbOS-staging"
 
 def gh(query, **vars):
     args = ["gh", "api", "graphql", "-f", f"query={query}"]
@@ -23,7 +23,7 @@ def gh(query, **vars):
     return json.loads(r.stdout)
 
 issue = gh("""query($n: Int!) {
-  repository(owner: "TipGroup-inc", name: "TipOS-staging") {
+  repository(owner: "TipGroup-inc", name: "OvsbOS-staging") {
     issue(number: $n) { id projectItems(first: 10) { nodes { id project { id } } } }
   }
 }""", n=NUM)["data"]["repository"]["issue"]

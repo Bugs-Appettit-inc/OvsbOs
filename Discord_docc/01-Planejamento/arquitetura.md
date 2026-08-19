@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🏗️ **ARQUITETURA — TipOS**
+🏗️ **ARQUITETURA — OvsbOS**
 
 **Base:** OvsbMkM — x86-64, long mode, ring 0, GRUB/Multiboot2, **single-address-space** (kernel e userland compartilham o mesmo espaço de endereçamento — ainda não há ring 3 nem proteção de página).
 
@@ -51,9 +51,9 @@ MBR → GRUB stage 1+2 → kernel.elf (multiboot2) → boot64.asm → kmain()
 - Binário nativo: **Mach-O 64-bit** (`LC_SEGMENT_64` + `LC_MAIN`), slide base `0x2000000`
 - Versionamento: `v0.STAGE.RELEASE.FEATURE`
 
-**Estrutura de diretórios (alvo, `tipos-plano.md`):**
+**Estrutura de diretórios (alvo, `ovsbos-plano.md`):**
 ```
-tipos/
+ovsbos/
 ├── kernel/arch/x86_64/   (boot, idt, pic, syscall_entry)
 ├── kernel/init/kmain.c
 ├── kernel/mm/pmm.c
@@ -62,7 +62,7 @@ tipos/
 ├── kernel/syscall/syscall.c
 ├── drivers/ (vga.c, ps2_keyboard.c)
 ├── apps/ (shell.c, tui.c, edit.c)
-├── libs/libc/, libs/libtipos/
+├── libs/libc/, libs/libovsbos/
 └── build/ (Makefile, kernel.ld, grub.cfg)
 ```
 

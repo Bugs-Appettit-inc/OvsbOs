@@ -5,7 +5,7 @@
 > Para a verdade de hoje: leia `README.md`, `AGENTS.md` e `KERNEL.md`.
 
 ---
-# TipOS — Organização do Código & Equipes
+# OvsbOS — Organização do Código & Equipes
 
 Baseado no OvsbMkM (https://github.com/Bugsappetit-inc/OvsbMkM) — microkernel 64-bit com terminal VGA, driver PS/2, IDT/PIC, syscalls XNU, carregador Mach-O, SMC/NVRAM mock.
 
@@ -48,10 +48,10 @@ O usuário ainda não fez alterações — o código é o original do OvsbMkM. Q
 
 ---
 
-## 2. Estrutura TipOS (diretórios)
+## 2. Estrutura OvsbOS (diretórios)
 
 ```
-tipos/
+ovsbos/
 ├── kernel/                     # Microkernel (Ring 0)
 │   ├── arch/
 │   │   └── x86_64/
@@ -67,7 +67,7 @@ tipos/
 │   │   ├── memory.h            ← memory.h (expandido)
 │   │   ├── mach_o.h            ← mach_o.h
 │   │   ├── syscall.h           (novo) — tabela de syscalls
-│   │   └── types.h             (novo) — tipos básicos
+│   │   └── types.h             (novo) — ovsbos básicos
 │   ├── init/
 │   │   └── kmain.c             ← kernel.c (sem VGA e shell)
 │   ├── mm/
@@ -95,7 +95,7 @@ tipos/
 │
 ├── libs/
 │   ├── libc/                   (novo) — libc mínima (str*, printf, malloc)
-│   ├── libtipos/                (novo) — syscall wrappers nativos
+│   ├── libovsbos/                (novo) — syscall wrappers nativos
 │   └── libmach/                (novo) — IPC Mach para apps
 │
 ├── apps/
@@ -319,7 +319,7 @@ Time A (kernel core) ── fornece syscalls ──► Time C (libc/shell)
 
 ---
 
-## 7. Makefile (adaptado para TipOS)
+## 7. Makefile (adaptado para OvsbOS)
 
 ```makefile
 CC := x86_64-elf-gcc
@@ -329,7 +329,7 @@ GRUB := grub-mkrescue
 QEMU := qemu-system-x86_64
 
 BUILD := build
-ISO := tipos.iso
+ISO := ovsbos.iso
 CFLAGS := -ffreestanding -nostdlib -mno-red-zone -mgeneral-regs-only -Wall -O0 -I kernel/include
 LDFLAGS := -T build/kernel.ld
 
@@ -350,22 +350,22 @@ DRIVER_OBJS := \
     $(BUILD)/keyboard_asm.o \
     $(BUILD)/vga.o
 
-all: $(BUILD)/tipos.elf
+all: $(BUILD)/ovsbos.elf
 
 run: $(ISO)
     $(QEMU) -cdrom $< -m 512M -serial stdio
 
 debug: $(ISO)
     $(QEMU) -cdrom $< -m 512M -s -S -serial stdio &
-    $(GDB) -ex "target remote :1234" -ex "symbol-file $(BUILD)/tipos.elf"
+    $(GDB) -ex "target remote :1234" -ex "symbol-file $(BUILD)/ovsbos.elf"
 
-$(ISO): $(BUILD)/tipos.elf
+$(ISO): $(BUILD)/ovsbos.elf
     mkdir -p iso/boot/grub
     cp $< iso/boot/
     cp build/grub.cfg iso/boot/grub/
     $(GRUB) -o $@ iso
 
-$(BUILD)/tipos.elf: $(KERNEL_OBJS) $(DRIVER_OBJS)
+$(BUILD)/ovsbos.elf: $(KERNEL_OBJS) $(DRIVER_OBJS)
     $(LD) $(LDFLAGS) -o $@ $^
 
 $(BUILD)/%.o: kernel/arch/x86_64/%.asm
@@ -385,11 +385,11 @@ $(BUILD)/%.o: drivers/*/
 
 ## 8. Checklist de Migração Imediata
 
-- [ ] Clonar OvsbMkM para `tipos/`
+- [ ] Clonar OvsbMkM para `ovsbos/`
 - [ ] Renomear arquivos conforme estrutura acima
 - [ ] Adaptar Makefile para nova estrutura
 - [ ] Separar VGA de kmain.c para `drivers/video/vga.c`
 - [ ] Separar shell de kmain.c para `apps/shell/shell.c`
-- [ ] Testar `make run` — deve mostrar "TipOS" no lugar de "OvsbMkM"
+- [ ] Testar `make run` — deve mostrar "OvsbOS" no lugar de "OvsbMkM"
 - [ ] Criar branches `team-a/`, `team-b/`, `team-c/`, `team-d/`
-- [ ] Publicar no GitHub: `github.com/levementesalgado/tipos`
+- [ ] Publicar no GitHub: `github.com/levementesalgado/ovsbos`

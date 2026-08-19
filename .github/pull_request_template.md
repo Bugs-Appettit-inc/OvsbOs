@@ -7,7 +7,7 @@
 
 **Código:**
 - [ ] Compila: `make kernel` (e `make userland` se mexeu em src/)
-- [ ] Testei no QEMU: `make run-test` (log em /tmp/tipos-boot.log)
+- [ ] Testei no QEMU: `make run-test` (log em /tmp/ovsbos-boot.log)
 - [ ] Refatoração incremental, nada de big bang (regra XP)
 - [ ] **Menos de 20 arquivos mudados** — se passou disso, precisa reunião de alinhamento antes (nem pro Coelho, dnv!)
 

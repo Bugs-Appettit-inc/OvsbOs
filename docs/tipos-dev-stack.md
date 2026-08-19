@@ -1,11 +1,11 @@
 <!-- moe moe kyun <3 -->
-# TipOS — Fluxo de Desenvolvimento & Stack
+# OvsbOS — Fluxo de Desenvolvimento & Stack
 
 ---
 
 ## 1. Nome
 
-**TipOS** (substituindo Kora OS).  
+**OvsbOS** (substituindo Kora OS).  
 Motivo: nome curto, sem conflito com outros projetos.
 
 ---
@@ -70,7 +70,7 @@ gcc make nasm qemu xorriso mtools python3
 ## 3. Estrutura de Diretórios
 
 ```
-tipos/
+ovsbos/
 ├── boot/               # Bootloader (own or Limine config)
 │   └── multiboot2/
 ├── kernel/             # Microkernel
@@ -95,7 +95,7 @@ tipos/
 │   └── audio/          # HDA
 ├── libs/               # Libraries
 │   ├── libc/           # Minimal POSIX-like C library
-│   ├── libtipos/        # TipOS-native syscall wrappers
+│   ├── libovsbos/        # OvsbOS-native syscall wrappers
 │   ├── libmach/        # Mach IPC client library
 │   └── libui/          # Windowing toolkit
 ├── translators/        # Syscall translation layers
@@ -131,19 +131,19 @@ tipos/
 
 ```makefile
 # Makefile (raiz)
-all: tipos.iso
+all: ovsbos.iso
 
-run: tipos.iso
+run: ovsbos.iso
     qemu-system-x86_64 -cdrom $< -m 512M -serial stdio
 
-debug: tipos.iso
+debug: ovsbos.iso
     qemu-system-x86_64 -cdrom $< -m 512M -s -S -serial stdio &
-    gdb -ex "target remote :1234" -ex "symbol-file kernel/tipos.elf"
+    gdb -ex "target remote :1234" -ex "symbol-file kernel/ovsbos.elf"
 
-tipos.iso: kernel/tipos.elf
+ovsbos.iso: kernel/ovsbos.elf
     grub-mkrescue -o $@ iso/
 
-kernel/tipos.elf: $(wildcard kernel/**/*.c kernel/**/*.asm)
+kernel/ovsbos.elf: $(wildcard kernel/**/*.c kernel/**/*.asm)
     $(MAKE) -C kernel
 ```
 
@@ -165,7 +165,7 @@ Baseado no protótipo existente (boot 64-bit, VGA, teclado PS/2, IDT/PIC), o que
 
 - [ ] Criar o `Makefile` cross-compilado (x86_64-elf-gcc)
 - [ ] Configurar linker script (`kernel.ld`) com seções `.text`, `.rodata`, `.data`, `.bss`
-- [ ] Migrar o código existente para a estrutura `tipos/kernel/arch/x86_64/`
+- [ ] Migrar o código existente para a estrutura `ovsbos/kernel/arch/x86_64/`
 - [ ] Adicionar log serial via porta COM1 (`outb(0x3F8, c)`) — mais confiável que VGA para debug
 
 ### 5.2 Paginação
@@ -185,7 +185,7 @@ Baseado no protótipo existente (boot 64-bit, VGA, teclado PS/2, IDT/PIC), o que
 
 - [x] Carregador **Mach-O** (já prototipado) — funcional (`mach_o.c`)
 - [x] Carregador **ELF** (musl static PIE) — funcional (`elf64.zig`, child PML4, 2MB hugepages)
-- [x] **Syscall translation** Linux→TipOS (`syscall_linux.zig`)
+- [x] **Syscall translation** Linux→OvsbOS (`syscall_linux.zig`)
 - [x] **Auxiliary vector** (`setup_linux_user_stack()`: AT_RANDOM, AT_PAGESZ, AT_SECURE, AT_PHNUM, AT_PHENT, AT_PHDR)
 
 ### 5.5 IPC básico
@@ -235,7 +235,7 @@ wget https://ftp.gnu.org/gnu/gcc/gcc-14.2.0/gcc-14.2.0.tar.xz
 # ... seguir receita da seção 2
 
 # 2. Estruturar diretórios
-mkdir -p ~/tipos/{kernel/arch/x86_64,kernel/ipc,kernel/mm,kernel/sched,kernel/syscall,servers,drivers,libs,boot,iso/boot/grub}
+mkdir -p ~/ovsbos/{kernel/arch/x86_64,kernel/ipc,kernel/mm,kernel/sched,kernel/syscall,servers,drivers,libs,boot,iso/boot/grub}
 
 # 3. Criar Makefile e linker script
 # 4. Mover código do protótipo existente

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Ideia nova pro TipOS? Abre card e marca o squad certo, kyun~ <3
+about: Ideia nova pro OvsbOS? Abre card e marca o squad certo, kyun~ <3
 title: "feat: "
 labels: ["enhancement"]
 assignees: []

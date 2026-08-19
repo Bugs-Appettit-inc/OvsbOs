@@ -1,9 +1,9 @@
 @startuml
 ' moe moe kyun <3
-' TipOS — arquitetura geral (componentes)
+' OvsbOS — arquitetura geral (componentes)
 ' atualizado em 2026-08-12 (pós limpeza: sem rust, sem dock, sem disp no repo)
 
-title TipOS — Visão Geral dos Componentes
+title OvsbOS — Visão Geral dos Componentes
 
 skinparam componentStyle rectangle
 skinparam shadowing false
@@ -21,7 +21,7 @@ package "OvsbMk — Kernel (ring 0)" as kernel #E8F0FE {
     component "shell.c\n(MkM>, exec...)" as shell
     component "mach_o.c\n(carregador Mach-O)" as macho
     component "elf64.zig\n(ELF64 musl static PIE)" as elf
-    component "syscall_linux.zig\n(tradução Linux→TipOS)" as trl
+    component "syscall_linux.zig\n(tradução Linux→OvsbOS)" as trl
     component "fs/\n(FAT32, ext2, initramfs)" as fs
     component "drivers/\n(ATA, PCI, USB, Virtio)" as drv
     component "kernel/drivers/\n(keyboard.zig, mouse.zig)" as drvzig
@@ -38,7 +38,7 @@ package "Repos irmãos" as irmaos {
     component "../term\n(terminal)" as term
 }
 
-component "QEMU\n(TipOS.iso + disk.img FAT32)" as qemu
+component "QEMU\n(OvsbOS.iso + disk.img FAT32)" as qemu
 
 qemu --> boot : "GRUB2 (Multiboot2)"
 boot --> kmain

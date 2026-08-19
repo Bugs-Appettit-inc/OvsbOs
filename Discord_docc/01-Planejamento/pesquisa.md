@@ -1,7 +1,7 @@
 <!-- moe moe kyun <3 -->
-🔬 **PESQUISA & REFERÊNCIAS — TipOS**
+🔬 **PESQUISA & REFERÊNCIAS — OvsbOS**
 
-Material de estudo pra consultar antes de implementar qualquer feature nova. (Fonte: `tipos-dev-stack.md`, seção 7)
+Material de estudo pra consultar antes de implementar qualquer feature nova. (Fonte: `ovsbos-dev-stack.md`, seção 7)
 
 ---
 
@@ -22,7 +22,7 @@ Material de estudo pra consultar antes de implementar qualquer feature nova. (Fo
 
 **🔧 Toolchain / cross-compiler**
 Target `x86_64-elf`: binutils 2.42+, gcc 14+ (só C, sem libc), nasm 2.16+, `grub-mkrescue`.
-Receita de build completa em `tipos-dev-stack.md`, seção 2.
+Receita de build completa em `ovsbos-dev-stack.md`, seção 2.
 
 ---
 
@@ -34,4 +34,4 @@ Receita de build completa em `tipos-dev-stack.md`, seção 2.
 - Driver AHCI/NVMe (hoje só ATA PIO legado)
 - Mapeamento de ~150 syscalls Linux → nativas (compat layer)
 
-Achou algo relevante? Posta aqui com uma linha explicando por que é útil pro TipOS.
+Achou algo relevante? Posta aqui com uma linha explicando por que é útil pro OvsbOS.

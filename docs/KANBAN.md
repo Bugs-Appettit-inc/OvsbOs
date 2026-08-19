@@ -1,7 +1,7 @@
-# TipOS — Painel Kanban & Regras de Fluxo (Kanban/Lean + XP)
+# OvsbOS — Painel Kanban & Regras de Fluxo (Kanban/Lean + XP)
 
 > moe moe kyun <3 — o board de verdade mora no GitHub Projects:
-> **https://github.com/orgs/TipGroup-inc/projects/8** ("TipOS — Kanban")
+> **https://github.com/orgs/TipGroup-inc/projects/8** ("OvsbOS — Kanban")
 >
 > Este arquivo é o espelho versionado do board: colunas, regras e squads.
 > Sem card vago, sem silêncio, sem big bang. Nhenhe~ >_<

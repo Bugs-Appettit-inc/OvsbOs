@@ -1,7 +1,7 @@
 <!-- moe moe kyun <3 -->
-🧩 **PROCESSOS — TipOS**
+🧩 **PROCESSOS — OvsbOS**
 
-**Status atual: funcional.** O TipOS agora tem **PCB**, **scheduler preemptivo** (round-robin via PIT), **paginação por processo** (PML4 próprio por execução), **TSS com RSP0 separado por processo**, e **FS.base save/restore** (TLS) para compatibilidade Linux.
+**Status atual: funcional.** O OvsbOS agora tem **PCB**, **scheduler preemptivo** (round-robin via PIT), **paginação por processo** (PML4 próprio por execução), **TSS com RSP0 separado por processo**, e **FS.base save/restore** (TLS) para compatibilidade Linux.
 
 O scheduler roda via PIT IRQ0, `context_switch` em `switch.asm`, pop+iretq. A tabela de processos tem 64 slots, com estados RUNNING/READY/BLOCKED/ZOMBIE.
 
@@ -16,7 +16,7 @@ Para a camada de compatibilidade Linux, o `switch.asm` também salva/restaura o 
 
 **Tabela de processos** — estrutura de dados a definir
 
-**Scheduler** — round-robin preemptivo (decisão já tomada em `tipos-dev-stack.md`, seção 6: "Round-robin com prioridades — começar simples")
+**Scheduler** — round-robin preemptivo (decisão já tomada em `ovsbos-dev-stack.md`, seção 6: "Round-robin com prioridades — começar simples")
 
 **Syscalls necessárias:** `fork`, `execve`, `wait`, `waitpid`, `yield`, `getpid` (hoje `getpid` é stub, sempre retorna 1 — `syscall.c:198`), `kill`
 
