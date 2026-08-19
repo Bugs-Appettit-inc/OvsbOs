@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🐚 **SHELL — OvsbOS**
+🐚 **SHELL — TipOS**
 
 **Prompt:** `MkM> ` — roda inline no kernel (`shell_loop()`, `kernel.c`), ainda não é um processo separado.
 
@@ -25,7 +25,7 @@ a execução de binários **musl-linked static PIE ELF64**:
 Hello from musl ELF!
 [/]#
 ```
-Isso usa `elf64.zig` (ELF loader) + `syscall_linux.zig` (tradução Linux→OvsbOS)
+Isso usa `elf64.zig` (ELF loader) + `syscall_linux.zig` (tradução Linux→TipOS)
 + `setup_linux_user_stack()` (auxiliary vector) + FS.base save/restore (TLS).
 
 **Ainda não funcional:**

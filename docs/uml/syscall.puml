@@ -1,6 +1,6 @@
 @startuml
 ' moe moe kyun <3
-' OvsbOS — fluxo de uma syscall (int 0x80, convenção XNU)
+' TipOS — fluxo de uma syscall (int 0x80, convenção XNU)
 ' rax = número, rdi/rsi/rdx/rcx = args, retorno em rax
 
 title Syscall — caminho do ring 3 ao ring 0

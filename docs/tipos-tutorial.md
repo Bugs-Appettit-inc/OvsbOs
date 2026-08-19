@@ -1,8 +1,8 @@
 <!-- moe moe kyun <3 -->
-# Tutorial: fazendo programas pro OvsbOS
+# Tutorial: fazendo programas pro TipOS
 
 Este tutorial cobre como escrever, compilar e rodar programas no
-OvsbOS usando a libc própria (MIT).
+TipOS usando a libc própria (MIT).
 
 ## Índice
 
@@ -26,7 +26,7 @@ Crie `src/userland/progs/hello.c`:
 #include <stdio.h>
 
 int main(int argc, char **argv) {
-    printf("Hello, OvsbOS!\n");
+    printf("Hello, TipOS!\n");
     return 0;
 }
 ```

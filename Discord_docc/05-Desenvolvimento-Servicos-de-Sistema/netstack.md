@@ -1,9 +1,9 @@
 <!-- moe moe kyun <3 -->
-🌐 **NETSTACK — OvsbOS**
+🌐 **NETSTACK — TipOS**
 
 **Status atual: não existe.** Companion do canal #rede (pasta Drivers) — aqui é a discussão de arquitetura da stack **como serviço isolado**, lá é sobre os drivers de placa de rede em si.
 
-**Decisão já tomada (`ovsbos-dev-stack.md`):**
+**Decisão já tomada (`tipos-dev-stack.md`):**
 > lwIP portado como servidor **user-space** — não embutido no kernel.
 
 **Escopo planejado:**

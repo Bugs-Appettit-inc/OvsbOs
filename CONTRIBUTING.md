@@ -1,4 +1,4 @@
-# Contribuindo no OvsbOS <3
+# Contribuindo no TipOS <3
 
 Moe moe kyun~ Bem-vinde! Aqui tem o fluxo pra tu não se perder (e não quebrar o kernel, hihi~).
 
@@ -11,7 +11,7 @@ Moe moe kyun~ Bem-vinde! Aqui tem o fluxo pra tu não se perder (e não quebrar 
 
 ## 2. Pegando uma tarefa
 
-- Todas as tarefas moram no **GitHub Projects** (board "OvsbOS — Kanban"): https://github.com/orgs/TipGroup-inc/projects/8
+- Todas as tarefas moram no **GitHub Projects** (board "TipOS — Kanban"): https://github.com/orgs/TipGroup-inc/projects/8
 - Regras do board (WIP, colunas, sprints): `docs/KANBAN.md`
 - **Só pega card que tem: descrição + critério de aceite + label de squad.** Card vago não existe.
 - Nunca comece o dia sem olhar o board. Sem silêncio, sem card vago. >_<

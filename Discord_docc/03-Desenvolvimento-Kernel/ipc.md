@@ -1,11 +1,11 @@
 <!-- moe moe kyun <3 -->
-📡 **IPC — OvsbOS**
+📡 **IPC — TipOS**
 
 **Status atual: não existe ainda.** Kernel monolítico single-address-space não precisa de IPC pra se comunicar consigo mesmo — mas é bloqueante pra tudo que envolve mover drivers/servidores pra user-space (Doca/HAL, VFS, WindowServer, netstack...).
 
 ---
 
-**Decisão já tomada (`ovsbos-dev-stack.md`, seção 6):**
+**Decisão já tomada (`tipos-dev-stack.md`, seção 6):**
 > IPC estilo **Mach** — portas, mensagens assíncronas, memória compartilhada.
 > Alternativa cogitada e descartada por ora: seL4-style sync IPC (mais rápido, API diferente).
 

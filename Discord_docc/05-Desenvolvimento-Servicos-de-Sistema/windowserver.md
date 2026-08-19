@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🪟 **WINDOW SERVER — OvsbOS**
+🪟 **WINDOW SERVER — TipOS**
 
 **Status: protótipo inicial existe.** `src/userland/disp/compositor.c` — compositor gráfico básico, ainda não integrado ao fluxo principal do shell.
 
@@ -7,7 +7,7 @@
 
 ---
 
-**Plano completo (`ovsbos-equipes-e-estrutura.md`, Time D):**
+**Plano completo (`tipos-equipes-e-estrutura.md`, Time D):**
 - Display server: processo dono do framebuffer
 - Compositor: janelas, Z-order, título, cursor por software
 - Eventos de teclado/mouse roteados via IPC (hoje o teclado vai direto pro shell — precisa desacoplar)

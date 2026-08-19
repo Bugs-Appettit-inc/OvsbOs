@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-❓ **DÚVIDAS — OvsbOS**
+❓ **DÚVIDAS — TipOS**
 
 Formato sugerido pra perguntas técnicas:
 

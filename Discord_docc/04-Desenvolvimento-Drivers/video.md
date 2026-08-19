@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🖥️ **VÍDEO — OvsbOS**
+🖥️ **VÍDEO — TipOS**
 
 **VGA modo texto 80x25 — já implementado:**
 - Buffer: `0xB8000`, 80×25 = 2000 células de 2 bytes (char + atributo de cor)

@@ -1,4 +1,4 @@
-# Mudanças Realizadas no OvsbOS
+# Mudanças Realizadas no TipOS
 
 ## Resumo
 Correções de compatibilidade para permitir compilação em sistemas com versões mais recentes de GCC/binutils.
@@ -30,7 +30,7 @@ Correções de compatibilidade para permitir compilação em sistemas com versõ
 ## Resultado
 - Kernel compila sem erros
 - graphy compilado (24396 bytes)
-- OvsbOS roda no QEMU
+- TipOS roda no QEMU
 
 ## Como testar
 make clean

@@ -1,0 +1,14 @@
+# moe moe kyun <3
+# Coisas do kernel OvsbMk que o git n precisa ver (build artifacts, ISOs, logs)
+build/
+*.o
+*.bin
+kernel.elf
+OvsbMk.iso
+.tmp*
+
+disk.img
+*.bak
+*.bak[0-9]
+qemu.log
+mnt/

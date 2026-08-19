@@ -5,13 +5,13 @@
 > Para a verdade de hoje: leia `README.md`, `AGENTS.md` e `KERNEL.md`.
 
 ---
-# OvsbOS — Arquitetura da Doca (Dock HAL)
+# TipOS — Arquitetura da Doca (Dock HAL)
 
 ## 1. Conceito
 
-A **Doca** é uma camada HAL que permite ao kernel OvsbOS usar drivers Linux
+A **Doca** é uma camada HAL que permite ao kernel TipOS usar drivers Linux
 sem violar a licença MIT. Funciona como um tradutor ABI: o driver acha que
-está rodando no Linux, mas está acoplado ao OvsbOS via uma interface estável.
+está rodando no Linux, mas está acoplado ao TipOS via uma interface estável.
 
 ### 1.1 Estratégia de Licenciamento (MIT + GPL)
 
@@ -21,9 +21,9 @@ MIT não pode incorporar código GPL.
 A solução é uma abordagem em **camadas com barreiras legais**:
 
 ```
- OvsbOS (MIT)
+ TipOS (MIT)
    │
-   ├── kernel OvsbOS (MIT) — código original
+   ├── kernel TipOS (MIT) — código original
    ├── dock/ (MIT) — API de compatibilidade, independente
    │     • NENHUMA linha copiada do Linux
    │     • ABI implementada por engenharia reversa limpa
@@ -31,7 +31,7 @@ A solução é uma abordagem em **camadas com barreiras legais**:
    │
    └── drivers/ — carregados em runtime pelo usuário
          • Usuário obtém o .ko da sua distribuição Linux (GPL)
-         • OvsbOS NÃO distribui nem inclui os drivers
+         • TipOS NÃO distribui nem inclui os drivers
          • Mesmo modelo do ndiswrapper (carrega .sys Windows)
          • O driver roda na Doca, que é MIT — ele "acha" que é Linux
 ```
@@ -52,7 +52,7 @@ A solução é uma abordagem em **camadas com barreiras legais**:
 
 ```
 src/
-├── kernel/                  # Núcleo do OvsbOS
+├── kernel/                  # Núcleo do TipOS
 │   ├── core/                # Scheduler, IPC, VFS, syscalls nativas
 │   │   ├── scheduler.c
 │   │   ├── ipc.c
@@ -73,8 +73,8 @@ src/
 │
 ├── dock/                    # Camada Doca — TODO EM MIT
 │   ├── include/             # Headers públicos da Doca (API estável)
-│   │   ├── dock.h           # Macros e ovsbos base
-│   │   ├── abi_stable.h     # ABI canônica do OvsbOS para drivers
+│   │   ├── dock.h           # Macros e tipos base
+│   │   ├── abi_stable.h     # ABI canônica do TipOS para drivers
 │   │   ├── api_pci.h
 │   │   ├── api_block.h
 │   │   ├── api_net.h
@@ -88,7 +88,7 @@ src/
 │   │   ├── manifest.c       # Parser de manifesto (JSON)
 │   │   └── lifecycle.c      # init, fini, reset do driver
 │   │
-│   ├── abi/                 # Tradutores ABI Linux → OvsbOS
+│   ├── abi/                 # Tradutores ABI Linux → TipOS
 │   │   ├── resolver.c       # Tabela de símbolos genérica
 │   │   ├── linux_5x.c       # Shim para ABI Linux 5.x
 │   │   ├── linux_6x.c       # Shim para ABI Linux 6.x
@@ -102,8 +102,8 @@ src/
 │   │   ├── api_video.c      # Framebuffer (vesa, drm compat)
 │   │   └── api_usb.c        # USB (UHCI, EHCI, XHCI)
 │   │
-│   ├── vfs/                 # Ponte para VFS do OvsbOS
-│   │   ├── file_ops.c       # read/write/ioctl do driver → syscall OvsbOS
+│   ├── vfs/                 # Ponte para VFS do TipOS
+│   │   ├── file_ops.c       # read/write/ioctl do driver → syscall TipOS
 │   │   └── devtmpfs.c       # /dev/ virtual (device nodes)
 │   │
 │   └── utils/               # Utilitários internos
@@ -130,7 +130,7 @@ src/
 │       └── pkg.json
 │
 └── lib/                     # Bibliotecas compartilhadas
-    └── libovsbos.so           # syscall wrapper para usermode
+    └── libtipos.so           # syscall wrapper para usermode
 ```
 
 ---
@@ -138,7 +138,7 @@ src/
 ## 3. ABI Canônica (abi_stable.h)
 
 Toda função que um driver Linux pode chamar é mapeada para a ABI estável
-do OvsbOS. A Doca resolve os símbolos em tempo de carga do .ko.
+do TipOS. A Doca resolve os símbolos em tempo de carga do .ko.
 
 ### 3.1 Memória
 
@@ -439,7 +439,7 @@ Cada driver roda em isolamento parcial:
 | **IRQs** | Só pode registrar IRQs declaradas no manifesto |
 | **MMIO** | Só mapeia BARs que pediu no manifesto |
 | **I/O ports** | Só acessa portas declaradas (filtro via bitmap de I/O) |
-| **Syscalls** | Só enxerga funções do tradutor ABI, não do kernel OvsbOS |
+| **Syscalls** | Só enxerga funções do tradutor ABI, não do kernel TipOS |
 | **Timeout** | Se `init_module()` não retornar em 5s, mata o driver |
 
 **Proteção por bitmap de I/O** (x86 TSS):
@@ -612,7 +612,7 @@ Cobertura completa para a maioria dos drivers: **~600 símbolos**.
 - [ ] Assinatura de manifesto (SHA-256)
 - [ ] Carregamento em runtime (hotplug: pendrive → carrega driver USB)
 - [ ] Reload de driver após erro
-- [ ] Ferramenta de usuário: `ovsbos-dock load/unload/list`
+- [ ] Ferramenta de usuário: `tipos-dock load/unload/list`
 - [ ] Documentação de criação de manifesto
 - [ ] Cobertura de ~600 símbolos para compatibilidade ampla
 
@@ -641,7 +641,7 @@ Cobertura completa para a maioria dos drivers: **~600 símbolos**.
 
 ## 11. Diferenças da Abordagem Tradicional
 
-| Característica | Linux (GPL) | ndiswrapper | OvsbOS Doca (MIT) |
+| Característica | Linux (GPL) | ndiswrapper | TipOS Doca (MIT) |
 |---|---|---|---|
 | **Licença** | GPLv2 | GPLv2 | **MIT** |
 | **Drivers** | Nativos do kernel | Windows .sys (proprietário) | Linux .ko (GPL, carregado em runtime) |

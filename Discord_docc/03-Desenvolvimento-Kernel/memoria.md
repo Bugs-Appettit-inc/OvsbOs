@@ -1,5 +1,5 @@
 <!-- moe moe kyun <3 -->
-🧠 **MEMÓRIA — OvsbOS**
+🧠 **MEMÓRIA — TipOS**
 
 **Arquivo:** `OvsbMkM/src/kernel/memory.c` (83 linhas)
 

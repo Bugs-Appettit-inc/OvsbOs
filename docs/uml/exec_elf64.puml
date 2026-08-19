@@ -1,6 +1,6 @@
 @startuml
 ' moe moe kyun <3
-' OvsbOS — exec de binário ELF64 (musl static PIE, Linux compat)
+' TipOS — exec de binário ELF64 (musl static PIE, Linux compat)
 ' shell "exec HELLO" → elf64.zig → child PML4 → ring 3
 
 title Exec de ELF64 (Linux x86-64 compat)

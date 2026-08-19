@@ -1,11 +1,11 @@
 <!-- moe moe kyun <3 -->
-💡 **IDEIAS & SONHOS — OvsbOS**
+💡 **IDEIAS & SONHOS — TipOS**
 
 Espaço livre pra ideias que ainda não viraram tarefa no roadmap oficial.
 
 ---
 
-**🏗️ Doca (Dock HAL) — driver framework MIT, sem GPL** (`ovsbos-doca.md`)
+**🏗️ Doca (Dock HAL) — driver framework MIT, sem GPL** (`tipos-doca.md`)
 
 A ideia mais ambiciosa em aberto: uma camada de abstração de hardware (HAL) que permite carregar **drivers em user-space via ELF**, com:
 - ABI canônica estável (`abi_stable.h`) cobrindo memória, sincronização, PCI, rede, bloco, input, vídeo (framebuffer/DRM) e USB
@@ -18,7 +18,7 @@ Isso resolve o problema de licença (kernel pode ficar GPL/proprietário enquant
 
 ---
 
-**Decisões arquiteturais em aberto** (`ovsbos-dev-stack.md`, seção 6):
+**Decisões arquiteturais em aberto** (`tipos-dev-stack.md`, seção 6):
 
 | Decisão | Opção cogitada | Alternativa |
 |---|---|---|
@@ -36,7 +36,7 @@ Bora debater cada uma antes de travar a decisão?
 ---
 
 **Outras ideias soltas:**
-- Splash de boot com bolinhas acendendo (`○ ○ ○ → ● ● ●`) antes de ir pro log técnico (`ovsbos-vision.md`)
+- Splash de boot com bolinhas acendendo (`○ ○ ○ → ● ● ●`) antes de ir pro log técnico (`tipos-vision.md`)
 - Separação física em 2 partições: kernel/bootloader vs. apps/config
 - Tradutores de syscall: Linux (ELF), Wine (Windows sobre Linux), Mach-O nativo
 - Hypervisor VT-x/AMD-V (Fase 8 do roadmap em equipe)

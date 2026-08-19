@@ -1,6 +1,6 @@
 @startuml
 ' moe moe kyun <3
-' OvsbOS — módulos do kernel OvsbMk (dependências principais)
+' TipOS — módulos do kernel OvsbMk (dependências principais)
 ' árvore real pós-limpeza (2026-08)
 
 title Kernel OvsbMk — módulos

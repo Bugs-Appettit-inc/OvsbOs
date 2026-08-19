@@ -1,9 +1,9 @@
 <!-- moe moe kyun <3 -->
-📍 **ROADMAP — OvsbOS**
+📍 **ROADMAP — TipOS**
 
-Base do projeto: **OvsbMkM** (kernel 64-bit, monolítico, single-address-space) → evoluindo pra **OvsbOS** (userland MIT + kernel reorganizado).
+Base do projeto: **OvsbMkM** (kernel 64-bit, monolítico, single-address-space) → evoluindo pra **TipOS** (userland MIT + kernel reorganizado).
 
-🔗 Docs completas no repo: `KERNEL.md`, `ovsbos-plano.md`, `ovsbos-dev-stack.md`
+🔗 Docs completas no repo: `KERNEL.md`, `tipos-plano.md`, `tipos-dev-stack.md`
 
 ---
 
@@ -14,27 +14,27 @@ Já funciona: boot GRUB/Multiboot2 → long mode → 30 syscalls (convenção XN
 
 ---
 
-**🗺️ Marcos (ovsbos-plano.md — 1 pessoa):**
+**🗺️ Marcos (tipos-plano.md — 1 pessoa):**
 
 | Marco | Escopo | Prazo estimado |
 |---|---|---|
-| 1 — Organização | Reestruturar OvsbMkM → `ovsbos/`, separar VGA/shell de `kmain.c` | 1-2 dias |
+| 1 — Organização | Reestruturar OvsbMkM → `tipos/`, separar VGA/shell de `kmain.c` | 1-2 dias |
 | 2 — Processos e IPC | IPC mínimo (Mach), scheduler round-robin, `spawn` | 1-2 semanas |
 | 3 — Terminal TUI | Multiplexação de janelas de texto, teclado via IPC | 1 semana |
 | 4 — Editor de Texto | Editor modal, syntax highlight básico | 1 semana |
 | 5 — Armazenamento | VFS + FAT32 real (`ls`, `cat`, `echo >`) | 2 semanas |
 | 6 — Carregador ELF | ✅ ELF64 loader + syscall translation + `exec HELLO` | ✅ Feito |
-| 7 — Auto-hospedagem | Compilar `.c` dentro do próprio OvsbOS | meta final |
+| 7 — Auto-hospedagem | Compilar `.c` dentro do próprio TipOS | meta final |
 
-**🎯 Milestone imediato:** OvsbMkM reorganizado bootando com o nome "OvsbOS" (splash + prompt).
+**🎯 Milestone imediato:** OvsbMkM reorganizado bootando com o nome "TipOS" (splash + prompt).
 
 ---
 
-**🧵 Roadmap com times (ovsbos-equipes-e-estrutura.md — versão em equipe, 8 fases / 40 semanas):**
+**🧵 Roadmap com times (tipos-equipes-e-estrutura.md — versão em equipe, 8 fases / 40 semanas):**
 
 Fase 1 Fundações → Fase 2 Processos/Memória → Fase 3 Armazenamento → Fase 4 Rede → Fase 5 Compat. Linux (ELF) → Fase 6 Modos de Performance → Fase 7 Vídeo/Áudio → Fase 8 Virtualização.
 
-Detalhe completo de cada fase e dependências entre times: ver `ovsbos-equipes-e-estrutura.md`, seção 5.
+Detalhe completo de cada fase e dependências entre times: ver `tipos-equipes-e-estrutura.md`, seção 5.
 
 ---
 
