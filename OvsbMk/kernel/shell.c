@@ -1,0 +1,705 @@
+/* moe moe kyun <3 */
+/* moe moe kyun <3 */
+/* ♥ kernel stuff ~ aqui é onde o bicho pega de verdade! kyun~
+ * arquivo: shell.c ~ funcoes anotadas: 17
+ */
+/* ♥ shell.c ~ feito com carinho (e gambiarras) pela equipe TipOS! ♥
+ * Se quebrar, a culpa é sua~ <3
+ *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*/
+
+
+/* ♥ SHELL ~ console interativo! comandos, exec, ls, cd~ tudo aqui! ♥
+ * Aqui é onde o usuario digita comandos e o kernel obedece (quando quer).
+ * O cmd_exec carrega binarios Mach-O do FAT32 e cria processos pra rodar.
+ * 
+ * Durante o debug, adicionei uns dumps:
+ * - Dump do codigo em 0x10001D20 (onde o DISP crashava)
+ * - Dump de scr_w e next_cascade logo apos carregar o DISP
+ * Isso ajudou a descobrir que scr_w tava sendo zerado entre o load e o crash
+ * (spoiler: era a syscall number errada no libdisp.h). kyun~ <3 */
+#include "shell.h"
+#include "console.h"
+#include "memory.h"
+#include "mach_o.h"
+#include "process.h"
+#include "pit.h"
+extern volatile int g_xorg_fb_mapped;
+extern int g_use_ext2;
+extern int vfs_stat_size(const char *name, uint32_t *size, uint8_t *attr);
+extern int fs_read_file(const char *name, unsigned char *buf, unsigned int count);
+extern int elf64_find_interp(unsigned char *data, unsigned int len, char *out, unsigned int out_max);
+extern void *elf64_load_at(unsigned char *data, unsigned int len, uint64_t pml4, uint64_t force_base);
+#include "../fs/vfs.h"
+static uint64_t dyn_interp_entry = 0;
+static uint64_t dyn_interp_base = 0;
+static int dyn_is_dynamic = 0;
+#include "serial.h"
+#include "../lib/gui/vesa.h"
+#include "../fs/fat32.h"
+#include <stdint.h>
+#include "../drivers/e1000.h"
+
+/* ~ cuidado que essa aqui morde ~ */
+static inline void outb(uint16_t port, uint8_t val) {
+    __asm__ volatile("outb %0, %1" :: "a"(val), "Nd"(port));
+}
+
+static int strieq(const char *a, const char *b, int n);
+
+#define MAX_CMD 256
+
+static char cmd_buf[MAX_CMD];
+static int  cmd_pos = 0;
+
+extern framebuffer_t g_fb;
+extern void owt_demo(void);
+extern void *elf64_load_into_pml4(const uint8_t *data, uint32_t len, uint64_t pml4);
+extern uint64_t elf64_pie_base(void);
+
+/* ELF64 header structs for Linux ABI */
+typedef struct {
+    unsigned char e_ident[16];
+    uint16_t e_type, e_machine;
+    uint32_t e_version;
+    uint64_t e_entry, e_phoff, e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize, e_phentsize, e_phnum;
+    uint16_t e_shentsize, e_shnum, e_shstrndx;
+} Elf64_Ehdr;
+typedef struct {
+    uint32_t p_type, p_flags;
+    uint64_t p_offset, p_vaddr, p_paddr, p_filesz, p_memsz, p_align;
+} Elf64_Phdr;
+#define PT_LOAD 1
+
+/* ~ cuidado que essa aqui morde ~ */
+static void prompt(void) {
+    console_write("ovsb> ");
+}
+
+/* ~ kyun~ mais uma funcao pra fazer o kernel n morrer */
+static void cmd_help(void) {
+    console_write("Comandos:\n");
+    console_write("  help                  Mostra esta ajuda\n");
+    console_write("  clear                 Limpa a tela\n");
+    console_write("  echo <texto>          Imprime o texto\n");
+    console_write("  info                  Info do sistema (VESA, heap)\n");
+    console_write("  hexdump <addr>        Exibe 64 bytes do endereco\n");
+    console_write("  run                   Executa programa ring 3 (embutido)\n");
+    console_write("  exec <arquivo>        Carrega e executa Mach-O do FAT32\n");
+    console_write("  ls                    Lista diretorio FAT32\n");
+    console_write("  cd <dir>              Muda diretorio FAT32\n");
+    console_write("  owt                   Demo do OWT (widget toolkit)\n");
+    console_write("  reboot                Reinicia o sistema\n");
+}
+
+/* ~ essa funcao aqui e a mais importante, presta atencao baka! */
+static void cmd_clear(void) {
+    console_clear();
+}
+
+/* ~ essa funcao aqui e a mais importante, presta atencao baka! */
+static void cmd_echo(const char *args) {
+    if (args) console_write(args);
+    console_write("\n");
+}
+
+/* ~ cuidado que essa aqui morde ~ */
+static void cmd_info(void) {
+    console_printf("VESA: %dx%d %dbpp\n", g_fb.width, g_fb.height, g_fb.bpp);
+    console_printf("Framebuffer: 0x%x\n", (unsigned int)g_fb.addr);
+    console_printf("Pitch: %d\n", g_fb.pitch);
+    console_printf("Heap: 64MB bump allocator\n");
+}
+
+/* ~ simples mas essencial, n mexe sem saber oq ta fazendo */
+static void cmd_hexdump(const char *args) {
+    if (!args || !args[0]) { console_write("uso: hexdump <addr_hex>\n"); return; }
+    unsigned int addr = 0;
+    for (int i = 0; args[i] && args[i] != ' '; i++) {
+        char c = args[i];
+        if (c >= '0' && c <= '9') addr = addr * 16 + (c - '0');
+        else if (c >= 'a' && c <= 'f') addr = addr * 16 + (c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') addr = addr * 16 + (c - 'A' + 10);
+        else break;
+    }
+    uint8_t *p = (uint8_t *)(uintptr_t)addr;
+    for (int row = 0; row < 4; row++) {
+        console_printf("%x: ", addr + row * 16);
+        for (int i = 0; i < 16; i++) {
+            char tmp[8];
+            unsigned char b = p[row * 16 + i];
+            tmp[0] = "0123456789abcdef"[b >> 4];
+            tmp[1] = "0123456789abcdef"[b & 0xF];
+            tmp[2] = ' ';
+            tmp[3] = 0;
+            console_write(tmp);
+        }
+        console_write(" |");
+        for (int i = 0; i < 16; i++) {
+            unsigned char b = p[row * 16 + i];
+            char ch = (b >= 32 && b < 127) ? b : '.';
+            console_putchar(ch);
+        }
+        console_write("|\n");
+    }
+}
+
+/* ~ kyun~ mais uma funcao pra fazer o kernel n morrer */
+#define EXEC_USER_STACK_SIZE 1048576
+
+/* ~ simples mas essencial, n mexe sem saber oq ta fazendo */
+static void cmd_exec(const char *args) {
+    if (!args || !args[0]) {
+        console_write("uso: exec <arquivo> [args...]\n");
+        return;
+    }
+    /* ~~ Separa o nome do arquivo dos argumentos ~~
+     * argv[0] = binario, argv[1..] = args pro ELF (ex: exec XORG XORG.CONF)~ */
+    char argv_bufs[18][64];
+    char *argv[19];
+    int argc = 0;
+    const char *p = args;
+    while (*p && argc < 18) {
+        while (*p == ' ') p++;
+        if (!*p) break;
+        int len = 0;
+        while (p[len] && p[len] != ' ') len++;
+        int n = len < 63 ? len : 63;
+        for (int i = 0; i < n; i++) argv_bufs[argc][i] = p[i];
+        argv_bufs[argc][n] = '\0';
+        argv[argc] = argv_bufs[argc];
+        argc++;
+        p += len;
+    }
+    argv[argc] = NULL;
+    /* ~~ Background: "exec FOO &" nao trava o shell!~~
+     * O Xorg roda em background enquanto a gente digita fvwm~ */
+    int bg = 0;
+    if (argc > 0 && argv[argc - 1][0] == '&' && argv[argc - 1][1] == '\0') {
+        bg = 1;
+        argc--;
+        argv[argc] = NULL;
+        if (argc == 0) { console_write("uso: exec <arquivo> [args...] &\n"); return; }
+    }
+    const char *fname = argv[0];
+    uint32_t fsize;
+    uint8_t attr;
+    /* ~~ PATH-like: nome relativo procura em /bin~~ */
+    char fbuf[128];
+    if (fname[0] != '/') {
+        int fi = 0;
+        fbuf[0] = '/'; fbuf[1] = 'b'; fbuf[2] = 'i'; fbuf[3] = 'n'; fbuf[4] = '/';
+        while (fname[fi] && fi < 120) { fbuf[5 + fi] = fname[fi]; fi++; }
+        fbuf[5 + fi] = '\0';
+        fname = fbuf;
+    }
+    char absp[VFS_MAX_PATH]; /* ~~ TEM que viver até o fim da função~~ */
+    {
+        pcb_t *me = process_current();
+        char tmpcwd[VFS_MAX_PATH];
+        const char *fcopy = fname;
+        int ci = 0;
+        while (fcopy[ci] && ci < VFS_MAX_PATH - 1) { tmpcwd[ci] = fcopy[ci]; ci++; }
+        tmpcwd[ci] = '\0';
+        if (vfs_abs_path(me ? me->cwd : "/", tmpcwd, absp, sizeof(absp)) == 0)
+            fname = absp;
+    }
+    if (vfs_stat_size(fname, &fsize, &attr) < 0) {
+        console_write("exec: arquivo nao encontrado\n");
+        return;
+    }
+    if (fsize < 32) {
+        console_write("exec: arquivo muito pequeno\n");
+        return;
+    }
+    uint8_t *buf = kmalloc(fsize + 1);
+    if (!buf) {
+        console_write("exec: sem memoria\n");
+        return;
+    }
+    if (vfs_read_file(fname, buf, fsize) < 0) {
+        console_write("exec: erro de leitura\n");
+        kfree(buf);
+        return;
+    }
+    console_printf("exec: carregando %s (%d bytes)\n", fname, (unsigned)fsize);
+
+    /* Detect ELF vs Mach-O */
+    int is_elf = (fsize >= 4 && buf[0] == 0x7F && buf[1] == 'E' && buf[2] == 'L' && buf[3] == 'F');
+    if (is_elf) {
+        /* ~~ ELF binary: o novo queridinho do pedaço! ~~
+         * Clona a PML4, carrega o binario, monta a pilha Linux~
+         * e cria o processo com proc_spawn (a API nova!) */
+        uint64_t child_pml4 = clone_identity_tables();
+        if (!child_pml4) { kfree(buf); console_write("exec: pml4 falhou\n"); return; }
+
+        Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buf;
+        uint64_t elf_base = (ehdr->e_type == 3) ? elf64_pie_base() : 0; /* ET_DYN = PIE */
+        uint64_t elf_phdr = 0, elf_phent = ehdr->e_phentsize, elf_phnum = ehdr->e_phnum;
+        uint64_t elf_bss_end = 0;
+        if (elf_phnum) {
+            Elf64_Phdr *pp = (Elf64_Phdr *)(buf + ehdr->e_phoff);
+            for (uint32_t k = 0; k < elf_phnum; k++) {
+                if (pp->p_type == PT_LOAD) {
+                    /* Guarda o primeiro PHDR pra por no auxv~ */
+                    if (elf_phdr == 0)
+                        elf_phdr = elf_base + pp->p_vaddr + (ehdr->e_phoff - pp->p_offset);
+                    uint64_t seg_end = pp->p_vaddr + pp->p_memsz;
+                    uint64_t a_start = (elf_base + pp->p_vaddr) & ~(0x1FFFFFULL);
+                    uint64_t a_end = (elf_base + seg_end + 0x1FFFFF) & ~(0x1FFFFFULL);
+                    /* ~~ Fim do BSS = program_break inicial do processo ~~
+                     * (o musl chama brk(0) pra saber onde o heap começa) */
+                    if (elf_base + seg_end > elf_bss_end)
+                        elf_bss_end = elf_base + seg_end;
+                    /* ~~ Libera o U/S pros segmentos do ELF ~~
+                     * clone_identity_tables tirou o bit de usuario~
+                     * A gente devolve pros paginas que o programa
+                     * precisa acessar~ */
+                    for (uint64_t va = a_start; va < a_end; va += 0x200000)
+                        pml4_add_user(child_pml4, va);
+                }
+                pp = (Elf64_Phdr *)((uint8_t *)pp + elf_phent);
+            }
+            elf_bss_end = (elf_bss_end + 0xFFF) & ~0xFFFULL;
+        }
+
+        void *entry = elf64_load_into_pml4(buf, fsize, child_pml4);
+        uint64_t main_binary_entry = (uint64_t)entry; /* entry ORIGINAL do binário */
+        uint64_t main_phdr_addr = elf_phdr;           /* phdrs já mapeados na memória */
+        unsigned char *saved_buf = buf;               /* dynlink precisa do arquivo */
+        uint32_t saved_fsize = fsize;
+        // Wayland lab fix: reset DYN globals por exec — senão EXEC estático herda ld.so anterior (FB bug)
+        dyn_interp_entry = 0; dyn_interp_base = 0; dyn_is_dynamic = 0;
+
+        /* ~~ ELF DINÂMICO (#71): carrega ld-musl se tiver PT_INTERP~~ */
+        char interp_path[256];
+        int ilen = -1;
+        if (is_elf)
+            ilen = elf64_find_interp(buf, fsize, interp_path, sizeof(interp_path));
+        if (!entry) { kfree(buf); }
+        if (ilen > 0) {
+            serial_puts("[dyn] interp=");
+            serial_puts(interp_path);
+            serial_puts("\r\n");
+            void *ientry = NULL;
+            if (!vfs_read_file(interp_path, NULL, 0)) { /* só pra checar que vfs tá vivo~ */ }
+            {
+                static unsigned char idata[2 * 1024 * 1024];
+                if (vfs_read_file(interp_path, idata, sizeof(idata)) > 0) {
+                    const uint64_t INTERP_BASE = 0x60000000ULL;
+                    ientry = elf64_load_at(idata, sizeof(idata), child_pml4, INTERP_BASE);
+                    if (ientry) {
+                        dyn_interp_entry = (uint64_t)ientry; /* entry REAL do ld.so */
+                        dyn_interp_base = INTERP_BASE;       /* AT_BASE = base do ld.so */
+                        dyn_is_dynamic = 1;
+                        serial_puts("[dyn] ld.so mapeado\r\n");
+                    } else {
+                        console_write("exec: falha ao mapear interpretador\n");
+                    }
+                } else {
+                    console_write("exec: interpretador não lido\n");
+                }
+            }
+        }
+        /* ~~ FASE 4: linker dinâmico no kernel (dynlink.c) ~~
+         * Se não achou ld.so no FS (interp ausente/falhou), aplica
+         * DT_NEEDED + RELA aqui mesmo e o binário roda direto no entry~ */
+        if (!dyn_is_dynamic && is_elf && entry) {
+            extern int dynlink_process(uint64_t pml4, unsigned char *data,
+                                       unsigned int len, uint64_t base);
+            int dl = dynlink_process(child_pml4, saved_buf, saved_fsize, elf_base);
+            if (dl == 0) {
+                console_write("exec: dynlink kernel OK\n");
+            } else if (dl > 0) {
+                serial_puts("[dyn] estatico, sem link\r\n");
+            } else {
+                console_write("exec: dynlink falhou\n");
+            }
+        }
+        if (buf) { kfree(buf); }
+        if (!entry && !dyn_is_dynamic) { console_write("exec: ELF invalido\n"); return; }
+        if (dyn_is_dynamic) {
+            /* ~~ entry REAL = o do ld.so (ele pula pro binário depois)~~
+             * mas o proc_spawn precisa de um entry: usa o do ld.so~
+             * O AT_BASE do auxv aponta pro ld.so também~ */
+            entry = (void *)dyn_interp_entry;
+        }
+        console_printf("exec: entry=%x\n", (unsigned int)(uint64_t)entry);
+
+        /* ~~ Aloca pilha do usuario ~~
+         * O kmalloc pega do heap (0xA00000+)~
+         * Depois a gente libera o U/S pro processo acessar~ */
+        void *ustack = mmap_user(0, EXEC_USER_STACK_SIZE, 3, 0);
+        if (!ustack) { console_write("exec: sem stack\n"); return; }
+        uint64_t stack_addr = (uint64_t)ustack;
+        /* ~~ U/S só nas páginas DO STACK (1MB): a janela de 2MB do
+         * identity também contém tabelas/frames do kernel — marcar a
+         * janela inteira deixava o user escrever nelas. E mmap_user
+         * (não kmalloc) = FRAME_USER → o fork COPIA o stack em vez de
+         * compartilhar (canário do filho não murcha mais). ~~ */
+        pml4_add_user_range(child_pml4, stack_addr,
+                            stack_addr + EXEC_USER_STACK_SIZE);
+
+        int pid = proc_spawn(fname, entry, (uint8_t *)ustack + EXEC_USER_STACK_SIZE);
+        if (pid < 0) { console_write("exec: spawn falhou\n"); munmap_user(ustack, EXEC_USER_STACK_SIZE); return; }
+
+        /* ~~ Troca a PML4 e monta o vetor auxiliar ~~
+         * A PML4 vazia do proc_spawn é substituida pela
+         * child_pml4 que tem o binario carregado~
+         * E o setup_linux_user_stack escreve argc, argv,
+         * envp, auxv na pilha do usuario~ (formato Linux!) */
+        for (int i = 0; i < MAX_PROC; i++) {
+            if (pcb_table[i].pid == pid) {
+                pml4_destroy(pcb_table[i].pml4);
+                pcb_table[i].pml4 = child_pml4;
+                /* ~~ Program break começa no fim do BSS do ELF ~~ */
+                if (elf_bss_end) {
+                    pcb_table[i].program_break = elf_bss_end;
+                    pcb_table[i].heap_start = elf_bss_end;
+                    serial_puts("[ELF-BRK] pid=");
+                    serial_puthex((uint32_t)pcb_table[i].pid);
+                    serial_puts(" end=");
+                    serial_puthex((uint32_t)elf_bss_end);
+                    serial_puts(" floor=");
+                    serial_puthex((uint32_t)pcb_table[i].heap_start);
+                    serial_puts("\r\n");
+                }
+                pcb_table[i].fs_base = 0x50000000ULL + ((uint64_t)pcb_table[i].pid * 0x1000ULL);
+                if (map_user_4kb(pcb_table[i].pml4, pcb_table[i].fs_base) < 0)
+                    pcb_table[i].fs_base = 0x1000ULL;
+                volatile uint64_t *tls_page = (volatile uint64_t *)(uintptr_t)pcb_table[i].fs_base;
+                tls_page[0] = 0; tls_page[1] = 0; tls_page[2] = 0; tls_page[3] = 0;
+                uint64_t *kframe = (uint64_t *)pcb_table[i].kernel_rsp;
+                /* WAYLAND LAB: env X11 comentado reversivelmente
+                 * DISPLAY=:0/HOME=/ETC/X11 eram para FVWM/Xorg.
+                 * LD_BIND_NOW permanece util para dynlink generico. */
+                // legado X11: DISPLAY=:0, HOME=/ETC/X11 -> comentado
+                // FASE1 Caminho B: cache sem dot para contornar FAT dot-dir bug
+                static char *exec_env[] = { "PATH=/bin", "SHELL=/BIN/SH",
+                                            "LD_LIBRARY_PATH=/lib:/usr/lib", "LD_BIND_NOW=1",
+                                            "HOME=/root",
+                                            "XDG_CACHE_HOME=/cache",
+                                            "FONTCONFIG_FILE=/etc/fonts/fonts.conf",
+                                            "XDG_RUNTIME_DIR=/tmp",
+                                            "LANG=C.UTF-8",
+                                            "LC_ALL=C.UTF-8",
+                                            "TERM=xterm-256color" };
+                uint64_t atbase = dyn_is_dynamic ? dyn_interp_base : elf_base;
+                kframe[18] = setup_linux_user_stack(&pcb_table[i], kframe[18],
+                                                     main_phdr_addr, elf_phent, elf_phnum,
+                                                     atbase, argv, argc,
+                                                     exec_env, 11,
+                                                     main_binary_entry);
+                /* ~~ debug: dump dos primeiros qwords da user stack ~~ */
+                if (dyn_is_dynamic) {
+                    uint64_t *usp = (uint64_t *)kframe[18];
+                    serial_puts("[dynstk] argc=");
+                    serial_puthex((uint32_t)usp[0]);
+                    serial_puts(" argv0=");
+                    serial_puthex((uint32_t)(usp[1]));
+                    serial_puts(" atbase_off=");
+                    /* varre TODOS os pares do auxv (do início ao AT_NULL)~~ */
+                    int qi = 1;
+                    while (usp[qi] != 0) qi++; qi++; // argv NULL
+                    while (usp[qi] != 0) qi++; qi++; // envp NULL
+                    /* agora é auxv~ */
+                    while (!(usp[qi] == 0 && usp[qi+1] == 0)) {
+                        if (usp[qi] == 7) serial_puts(" AT_BASE=");
+                        else if (usp[qi] == 3) serial_puts(" AT_PHDR=");
+                        else if (usp[qi] == 5) serial_puts(" AT_PHNUM=");
+                        else { qi += 2; continue; }
+                        serial_puthex((uint32_t)usp[qi+1]);
+                        qi += 2;
+                    }
+                    serial_puts("\r\n");
+                }
+                break;
+            }
+        }
+
+        console_printf("exec: PID %d rodando\n", pid);
+        /* ~~ debug: trace de syscall do fvwm/xterm (onde trava no X) ~~ */
+        {
+            extern int g_tipos_trace_pid;
+            int hit = 0;
+            for (const char *q = fname; *q; q++) {
+                if (!q[0] || !q[1] || !q[2] || !q[3]) break;
+                if ((q[0]=='F'||q[0]=='f') && (q[1]=='V'||q[1]=='v') &&
+                    (q[2]=='W'||q[2]=='w') && (q[3]=='M'||q[3]=='m')) hit = 1;
+                if ((q[0]=='X'||q[0]=='x') && (q[1]=='T'||q[1]=='t') &&
+                    (q[2]=='E'||q[2]=='e') && (q[3]=='R'||q[3]=='r')) hit = 1;
+                /* FASE5-DBG temporário: trace do foot (roundtrip EINVAL) */
+                if ((q[0]=='F'||q[0]=='f') && (q[1]=='O'||q[1]=='o') &&
+                    (q[2]=='O'||q[2]=='o') && (q[3]=='T'||q[3]=='t')) hit = 1;
+            }
+            if (hit) {
+                g_tipos_trace_pid = pid;
+                serial_puts("[trace] pid="); serial_puthex((uint32_t)pid);
+                serial_puts("\r\n");
+            }
+        }
+        if (bg) {
+            /* ~~ Background: o shell volta pro prompt NA HORA!~~
+             * NAO da kfree(ustack) — o processo ta usando ela~
+             * O yield salva o contexto ATUAL do shell no PCB dele~
+             * (sem isso o scheduler restaurava um KRNL_RSP velho,
+             *  de frame de exec antigo, e o shell voltava executando
+             *  lixo no meio da pilha~ rssrsrs) */
+            console_printf("exec: PID %d em background (&)\n", pid);
+            {
+                /* ~~ debug: estado do filho na hora do yield ~~ */
+                for (int q = 0; q < MAX_PROC; q++)
+                    if (pcb_table[q].pid == pid) {
+                        serial_puts("[bg] slot=");
+                        serial_puthex((uint32_t)q);
+                        serial_puts(" state=");
+                        serial_puthex((uint32_t)pcb_table[q].state);
+                        serial_puts(" cur=");
+                        serial_puthex((uint32_t)process_current_pid());
+                        serial_puts("\r\n");
+                        break;
+                    }
+            }
+            return;
+        }
+        process_switch_to(pid);
+        int code = -1;
+        for (int i = 0; i < MAX_PROC; i++)
+            if (pcb_table[i].pid == pid) { code = pcb_table[i].exit_code; break; }
+        kfree(ustack);
+        console_printf("exec: processo encerrou (exit code %d)\n", code);
+        return;
+    }
+
+    /* ~~ Mach-O binary: existing path ~~ */
+    void *entry = mach_o_load(buf, fsize);
+    if (!entry) {
+        console_write("exec: formato Mach-O invalido\n");
+        kfree(buf);
+        return;
+    }
+    void *ustack = kmalloc(EXEC_USER_STACK_SIZE);
+    if (!ustack) {
+        console_write("exec: sem memoria para pilha\n");
+        kfree(buf);
+        return;
+    }
+    serial_puts("exec: pages ok\r\n");
+    console_printf("exec: entry=%x\n", (unsigned int)(uint64_t)entry);
+    int pid = process_create_user(args, entry, ustack, EXEC_USER_STACK_SIZE);
+    if (pid < 0) {
+        console_write("exec: erro ao criar processo\n");
+        kfree(buf);
+        kfree(ustack);
+        return;
+    }
+    kfree(buf);
+    console_printf("exec: PID %d rodando\n", pid);
+    process_switch_to(pid);
+    int code = -1;
+    for (int i = 0; i < MAX_PROC; i++)
+        if (pcb_table[i].pid == pid) { code = pcb_table[i].exit_code; break; }
+    kfree(ustack);
+    console_printf("exec: processo encerrou (exit code %d)\n", code);
+}
+
+/* ~ kyun~ mais uma funcao pra fazer o kernel n morrer */
+static void cmd_desktop(void) {
+    cmd_exec("DESKTOP.BIN");
+}
+
+/* ~ essa demorou pra debugar, respeita ~ */
+static void cmd_ls(void) {
+    fat32_list_dir();
+}
+
+/* ~ kyun~ mais uma funcao pra fazer o kernel n morrer */
+static void cmd_cd(const char *args) {
+    if (!args || !args[0]) {
+        fat32_change_dir("..");
+        return;
+    }
+    /* ~~ VFS #70: cwd POR PROCESSO~~ */
+    {
+        pcb_t *me = process_current();
+        char newcwd[VFS_MAX_PATH];
+        if (me && vfs_abs_path(me->cwd, args, newcwd, sizeof(newcwd)) == 0 &&
+            vfs_chdir_isdir(newcwd)) {
+            int ci = 0;
+            while (newcwd[ci] && ci < 254) { me->cwd[ci] = newcwd[ci]; ci++; }
+            me->cwd[ci] = '\0';
+        }
+    }
+    char cwd[256];
+    fat32_get_cwd_name(cwd, 256);
+    console_write(cwd);
+    console_write("\n");
+}
+
+/* ~ essa funcao aqui e a mais importante, presta atencao baka! */
+static void cmd_reboot(void) {
+    console_write("Reiniciando...\n");
+    outb(0x64, 0xFE);
+    for(;;);
+}
+
+/* ~ essa funcao aqui e a mais importante, presta atencao baka! */
+static char *trim(char *text) {
+    while (*text == ' ' || *text == '\t' || *text == '\r' || *text == '\n') text++;
+    char *end = text;
+    while (*end) end++;
+    while (end > text && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
+        *--end = 0;
+    return text;
+}
+
+static void execute_one(char *cmd) {
+    cmd = trim(cmd);
+    if (!*cmd) return;
+
+    char *args = cmd;
+    while (*args && *args != ' ' && *args != '\t') args++;
+    int cmd_len = args - cmd;
+    while (*args == ' ' || *args == '\t') args++;
+
+    if (strieq(cmd, "help", 4) && cmd_len == 4) cmd_help();
+    else if (strieq(cmd, "clear", 5) && cmd_len == 5) cmd_clear();
+    else if (strieq(cmd, "echo", 4) && cmd_len == 4) cmd_echo(args);
+    else if (strieq(cmd, "info", 4) && cmd_len == 4) cmd_info();
+    else if (strieq(cmd, "hexdump", 7) && cmd_len == 7) cmd_hexdump(args);
+    else if (strieq(cmd, "exec", 4) && cmd_len == 4) cmd_exec(args);
+    else if (strieq(cmd, "ls", 2) && cmd_len == 2) cmd_ls();
+    else if (strieq(cmd, "cd", 2) && cmd_len == 2) cmd_cd(args);
+        else if (strieq(cmd, "desktop", 7) && cmd_len == 7) cmd_desktop();
+    else if (strieq(cmd, "owt", 3) && cmd_len == 3) { owt_demo(); console_write("OWT ok\n"); }
+    else if (strieq(cmd, "sendpacket", 10) && cmd_len == 10) {
+        uint8_t frame[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF, 0x52,0x54,0x00,0x12,0x34,0x56, 0x08,0x06, 0x00,0x01,0x08,0x00,0x06,0x04,0x00,0x01, 0x52,0x54,0x00,0x12,0x34,0x56, 0x0A,0x00,0x02,0x02, 0x00,0x00,0x00,0x00,0x00,0x00, 0x0A,0x00,0x02,0x01};
+        e1000_send(frame, sizeof(frame));
+        console_write("Pacote enviado!\n");
+    }
+    else if (strieq(cmd, "reboot", 6) && cmd_len == 6) cmd_reboot();
+    else {
+        /* ~~ Fallback: comando desconhecido = tenta executar o arquivo!~~
+         * "fvwm" no PATH (cwd) vira exec fvwm~ estilo shell de verdade~ */
+        char line[256];
+        int i = 0;
+        while (cmd[i] && i < 255) { line[i] = cmd[i]; i++; }
+        line[i] = '\0';
+        uint32_t fsize; uint8_t attr;
+        if (vfs_stat_size(line, &fsize, &attr) == 0)
+            cmd_exec(line);
+        else {
+            console_write("comando nao encontrado: ");
+            console_write(cmd);
+            console_write("\n");
+        }
+    }
+}
+
+void execute(const char *cmd) {
+    char segment[MAX_CMD];
+    int length = 0;
+    while (*cmd) {
+        if (*cmd == ';' || *cmd == '\n') {
+            segment[length] = 0;
+            execute_one(segment);
+            length = 0;
+        } else if (length < MAX_CMD - 1) {
+            segment[length++] = *cmd;
+        }
+        cmd++;
+    }
+    segment[length] = 0;
+    execute_one(segment);
+}
+
+/* ~ kyun~ mais uma funcao pra fazer o kernel n morrer */
+static int strieq(const char *a, const char *b, int n) {
+    for (int i = 0; i < n; i++) {
+        if (a[i] != b[i]) return 0;
+        if (!a[i]) return 1;
+    }
+    return 1;
+}
+
+/* ~~ Inicializando~~ torce pra não dar panic! */
+/* ~ essa demorou pra debugar, respeita ~ */
+void shell_init(void) {
+    cmd_pos = 0;
+    console_write("OvsbMkM Kernel Console\n");
+    /* First test Linux ELF compatibility */
+    cmd_exec("/bin/HELLO");
+    /* Then try the terminal test (threads/sinais) */
+    cmd_exec("/bin/TTEST");
+    cmd_exec("/BIN/PTY_TEST");
+    cmd_exec("/BIN/SIGNAL_TEST");
+    cmd_exec("/BIN/SIGCHLD_TEST");
+    cmd_exec("/BIN/SIGWINCH_TEST");
+    cmd_exec("/BIN/DYN_TEST");
+    cmd_exec("/BIN/HELLO_DYN");
+    /* AUTO-BOOT Fase 8.1: compositor + desktop (foot manual via menu). */
+    cmd_exec("/BIN/WAYLAND_COMPOSITOR_LIB &");
+    sleep_ms(2000);
+    cmd_exec("/BIN/OVSB-DESKTOP &");
+    sleep_ms(2000);
+    // cmd_exec("/BIN/FOOT");             // manual (via menu, Fase 8.2+)
+    // Wayland lab: fb/evdev tested (FB_EVDEV_TEST on demand)
+    // cmd_exec("/BIN/FB_EVDEV_TEST");
+    // MEMFD test sem auto-run (manual: exec /BIN/MEMFD_RAW_SCM)
+    // MEMFD dedicated test removido — compositor retangulo agora
+    // Wayland compositor retangulo (Parte 4 Commit 3) — so compositor em background
+    // Cliente de teste manual: exec /BIN/WAYLAND_SHM_CLIENT  (nao auto-run)
+//     cmd_exec("/BIN/WAYLAND_COMPOSITOR_SHM &");
+    // FASE1: auto-run removido (shell limpa)
+    /* WAYLAND LAB: X11 autoexec desabilitado (XORG/FVWM2/XTERM) — ver Parte 0
+     * Reversivel: descomentar para restaurar abordagem X11.
+     * Framebuffer permanece com console ativo para fase Wayland.
+     */
+    // /* ~~ AUTOEXEC FASE 5: Xorg sobe no boot ~~
+    //  * rootfs X11: /BIN/XORG + libs em /LIB, /LIB64, xorg.conf em
+    //  * /ETC/X11/XORG.CONF. Log detalhado em /dev/stderr~ */
+    // /* ~~ console do kernel sai do fbdev: o Xorg vira o dono do
+    //  * framebuffer (senao o log do kernel pinta por cima do Xterm)~~ */
+    // extern void vesa_fill_screen(unsigned int color);
+    // vesa_fill_screen(0x000000);   /* limpa o frame congelado do console */
+    // g_console_fbdev_enabled = 0;
+    // cmd_exec("/BIN/XORG -config /ETC/X11/XORG.CONF -ac -nolisten local -logfile /dev/stderr -verbose 7 -logverbose 7 &");
+    // cmd_exec("/BIN/FVWM2 -f /ETC/X11/.fvwm2rc &");  /* fvwm2: StartFunction lanca XTERM -e /BIN/SH */
+    // cmd_exec("/BIN/XTERM -e /BIN/SH &");  /* garantia extra: xterm puro com shell */
+    /* ~~ cwd fake sob ext2 — os paths de exec são absolutos~~ */
+    /* TIPOS-TEST: DISP desligado pra liberar o framebuffer pro Xorg.
+     * Reverter antes de mergear: cmd_exec("DISP"); */
+    prompt();
+}
+
+/* ~~ shell_input ~~ */
+/* ~ kyun~ mais uma funcao pra fazer o kernel n morrer */
+void shell_input(char c) {
+    if (c == '\n') {
+        cmd_buf[cmd_pos] = 0;
+        console_write("\n");
+        execute(cmd_buf);
+        cmd_pos = 0;
+        prompt();
+    } else if (c == '\b') {
+        if (cmd_pos > 0) {
+            cmd_pos--;
+            console_write("\b \b");
+        }
+    } else {
+        if (cmd_pos < MAX_CMD - 1) {
+            cmd_buf[cmd_pos++] = c;
+            console_putchar(c);
+        }
+    }
+}
+
+/* ♥ TODO: adicionar suporte a argumentos pra exec ~ argv futuramente! */
+
+/* ♥ HELLO ~ kernel funcionando! */
+
+
+
+
+/* ♥ shell.c ~ se bugar me chama, se n bugar tb me chama ~ >u< */

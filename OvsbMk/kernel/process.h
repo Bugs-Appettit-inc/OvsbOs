@@ -1,0 +1,129 @@
+/* moe moe kyun <3 */
+/* moe moe kyun <3 */
+/* ♥ kernel stuff ~ aqui é onde o bicho pega de verdade! kyun~
+ * arquivo: process.h ~ funcoes anotadas: 0
+ */
+/* ♥ process.h ~ feito com carinho (e gambiarras) pela equipe TipOS! ♥
+ * Se quebrar, a culpa é sua~ <3
+ *~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*~*/
+
+#ifndef PROCESS_H
+#define PROCESS_H
+#include <stdint.h>
+#include "signal.h"
+
+struct vm_map;
+struct vmspace;
+struct tty;
+
+/* ♥ PROCESS ~ Gerenciamento de processos fofinho!
+ * Dica: PCB = Process Control Block~ salva tudo do processo!
+ * Agora com scheduler round-robin, waitpid, yield~
+ * Estados: EMPTY, READY, RUNNING, BLOCKED, ZOMBIE~
+ * Ce ta preparado? kyun~ <3 */
+
+#define MAX_PROC 64
+#define STACK_SIZE 8192
+#define PROC_NAME_MAX 32
+
+/* ♥ Estados do processo ~ "Tabela de estados! DECORE!" */
+#define PROC_EMPTY   0
+#define PROC_READY   1
+#define PROC_RUNNING 2
+#define PROC_BLOCKED 3
+#define PROC_ZOMBIE  4
+
+/* ♥ PCB ~ Tudo que o processo precisa!
+ * A switch.asm acessa offsets fixos~ nao mude a ordem!
+ * program_break e heap_start sao extras do OvsbMkM~
+ * vm_map = mapa de enderecos estilo FreeBSD (vm_map.h) */
+typedef struct pcb {
+    int pid;
+    int state;
+    char name[PROC_NAME_MAX];
+    int is_user;
+    int padding;
+    uint64_t kernel_rsp;
+    uint64_t rsp0;
+    uint64_t pml4;
+    uint64_t user_rsp;
+    uint64_t user_rip;
+    uint64_t user_rflags;
+    uint64_t s_rbx, s_rbp, s_r12, s_r13, s_r14, s_r15;
+    int parent_pid;
+    int exit_code;
+    uint64_t program_break;
+    uint64_t heap_start;
+    struct vm_map *vm_map;
+    struct vmspace *vmspace;
+    uint64_t fs_base;
+    char cwd[256];          /* ~~ diretório atual POR PROCESSO (VFS #70) ~~ */
+    void *fds_tab;          /* ~~ tabela de fds POR PROCESSO (fork #72) ~~ */
+    int in_kern;            /* ~~ 1 = bloqueado DENTRO de syscall (resume
+                                  continua o fluxo C, sem iretq!)~~ */
+    int th_parent_pid;      /* ~~ clone/THREAD: pid do criador; -1 = não é
+                                  thread (processo de verdade)~~ */
+    volatile long *clear_tid; /* ~~ CLONE_CHILD_CLEARTID: zera + acorda o
+                                  joiner no exit da thread~~ */
+    struct tty *controlling_tty;
+    tipos_sigaction_t actions[64];
+    uint64_t blocked;
+    uint64_t pending;
+    int pgrp;
+    int session;
+} pcb_t;
+
+extern pcb_t pcb_table[MAX_PROC];
+extern int current_pid;
+extern int next_pid;
+
+void process_init(void);
+int  process_create_user(const char *name, void *entry, void *user_stack, uint64_t user_stack_size);
+void process_switch_to(int pid);
+void process_exit_current(int code);
+pcb_t *process_current(void);
+int    process_current_pid(void);
+
+/* ♥ Novas funcoes do scheduler aprimorado! */
+int  proc_spawn(const char *name, void *entry, void *user_stack_top);
+void proc_exit(int code);
+void proc_wake_parent(int child_pid);
+int  proc_waitpid(int pid, int *exit_code);
+void proc_yield(void);
+void schedule(void);
+
+/* ♥ fork real (#72) ~ clona o processo atual~
+ * parent_kframe = frame de 20 qwords do handler da syscall~
+ * Retorna o PID do filho; filho "retorna" 0 (RAX=0 no frame dele)~ */
+int proc_fork(uint64_t *parent_kframe);
+int proc_clone_thread(uint64_t flags, uint64_t newsp, uint64_t ptid,
+                      uint64_t ctid, uint64_t tls, uint64_t *parent_kframe);
+void proc_thread_exit(int code);
+void proc_kill_siblings(pcb_t *me);
+
+void context_switch(pcb_t *current, pcb_t *next);
+
+/* ~~ setup_linux_user_stack ~~
+ * Monta a pilha Linux pro usuario! argc, argv, envp, auxv~
+ * Tudo que o musl precisa pra nao reclamar da vida~
+ * Recebe o topo da pilha e devolve o novo RSP~ */uint64_t setup_linux_user_stack(pcb_t *pcb, uint64_t user_stack_top,
+                                uint64_t phdr, uint64_t phent, uint64_t phnum,
+                                uint64_t elf_base,
+                                char **argv, int argc,
+                                char **envp, int envc,
+                                uint64_t at_entry);
+uint64_t setup_linux_user_stack_dyn(pcb_t *pcb, uint64_t user_stack_top,
+                                    uint64_t phdr, uint64_t phent, uint64_t phnum,
+                                    uint64_t elf_base, char **argv, int argc,
+                                    char **envp, int envc,
+                                    uint64_t interp_base, uint64_t main_entry,
+                                    int is_dynamic);
+
+#endif
+
+/* ♥ USER STACK ~ pilha do usuario em user accessible memory! */
+
+
+
+
+/* ♥ process.h ~ feito com carinho (e uma raiva controlada) ~ kyun! */

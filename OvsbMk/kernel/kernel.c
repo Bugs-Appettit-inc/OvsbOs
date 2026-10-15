@@ -1,0 +1,140 @@
+/* moe moe kyun <3 */
+/* moe moe kyun <3 */
+/* ♥ kernel stuff ~ aqui é onde o bicho pega de verdade! kyun~
+ * arquivo: kernel.c ~ funcoes anotadas: 2
+ */
+/* ♥ OvsbMkM - Kernel com ring 3! "Agora com modo usuario~ kyun!"
+ * Dica: TSS, GDT com segmentos ring 3, syscall int 0x80~
+ * Processo idle (shell) roda em ring 0~ o programinha em ring 3!
+ * Se der page fault, e porque o usuario e um baka! >_< */
+#include <stdint.h>
+#include "idt.h"
+#include "memory.h"
+#include "pit.h"
+#include "serial.h"
+#include "console.h"
+#include "shell.h"
+#include "tss.h"
+#include "process.h"
+#include "syscall.h"
+#include "../drivers/ata.h"
+#include "../drivers/mouse.h"
+#include "../drivers/keyboard.h"
+#include "../drivers/usb.h"
+#include "../drivers/e1000.h"
+#include "../drivers/ata.h"
+#include "../drivers/virtio_gpu.h"
+#include "../fs/fat32.h"
+#include "../lib/gui/vesa.h"
+#include "../lib/wm/wm.h"
+#include "../lib/owt/owt.h"
+
+void keyboard_init(void);
+void pic_init(void);
+
+static inline uint8_t inb(uint16_t p) { uint8_t r; __asm__ volatile ("inb %1, %0":"=a"(r):"Nd"(p)); return r; }
+static inline void outb(uint16_t p, uint8_t v) { __asm__ volatile ("outb %0, %1"::"a"(v),"Nd"(p)); }
+
+volatile int sigint_pending = 0;
+framebuffer_t g_fb;
+int g_fb_active = 0;
+
+/* ~ essa demorou pra debugar, respeita ~ */
+void kmain(uint32_t magic, uint32_t mb_info) {
+    serial_init();
+    serial_puts("[OvsbMkM] Iniciando~ kyun!\r\n");
+    idt_init(); pic_init(); idt_set_irq1(); idt_set_irq12();
+    keyboard_init(); mouse_init(); memory_init();
+    tss_init();
+    usb_init();
+    e1000_init();
+    ata_init();
+    {
+        extern int vfs_mount(void);
+        extern int g_use_ext2;
+        int be = vfs_mount();
+        if (be == 1) console_write("FAT32: disco montado!\n");
+        g_use_ext2 = (be == 0); /* compat com handlers ainda não migrados */
+    }
+    __asm__ volatile("sti");
+    pit_init();
+
+    g_fb.addr = 0;
+    uint32_t *tags = (uint32_t *)(uintptr_t)mb_info;
+    if (magic == 0x36D76289 && tags) {
+        uint32_t total = tags[0];
+        for (uint32_t i = 8; i < total;) {
+            uint32_t type = *(uint32_t *)((uint8_t *)tags + i);
+            uint32_t size = *(uint32_t *)((uint8_t *)tags + i + 4);
+            if (type == 8) {
+                g_fb.addr  = *(uint64_t *)((uint8_t *)tags + i + 8);
+                g_fb.pitch = *(uint32_t *)((uint8_t *)tags + i + 16);
+                g_fb.width = *(uint32_t *)((uint8_t *)tags + i + 20);
+                g_fb.height= *(uint32_t *)((uint8_t *)tags + i + 24);
+                g_fb.bpp   = *(uint8_t *)((uint8_t *)tags + i + 28);
+            }
+            if (type == 0) break;
+            i += size;
+            if (i % 8) i += 8 - (i % 8);
+        }
+    }
+
+    /* Try VirtIO-GPU first (QEMU), fall back to VESA (real hw) */
+    if (virtio_gpu_init(&g_fb, &(uint64_t){0}) == 0) {
+        g_fb_active = 1;
+        serial_puts("[OvsbMkM] VirtIO-GPU OK!\r\n");
+    } else if (g_fb.addr && g_fb.bpp == 32) {
+        if (vesa_init(&g_fb) == 0) {
+            g_fb_active = 1;
+            serial_puts("[OvsbMkM] VESA OK!\r\n");
+        }
+    }
+
+    /* Write framebuffer info at fixed address 0x500000 for userland */
+    if (g_fb_active) {
+        *(uint64_t *)0x500000 = g_fb.addr;
+        *(uint32_t *)0x500008 = g_fb.width;
+        *(uint32_t *)0x50000C = g_fb.height;
+    }
+
+    console_init();
+    serial_puts("[OvsbMkM] Console pronto!\r\n");
+
+    /* Ring 3 setup: process frames use CS=0x1B and SS=0x23. */
+    syscall_init();
+    process_init();
+
+    if (g_fb_active && g_fb.addr) {
+        wm_init((uint32_t *)g_fb.addr, g_fb.width, g_fb.height, g_fb.pitch / 4);
+        serial_puts("[WM] Window Manager pronto!\r\n");
+    }
+
+    /* Boot direto no desktop; o shell continua disponivel via syscall. */
+    shell_init();
+
+    /* ♥ OWT pronto! Digite 'owt' no shell pra testar */
+
+    while (1) {
+        if (keyboard_avail()) {
+            char key = keyboard_read();
+            shell_input(key);
+        }
+        /* polling legado do mouse removido: o inb(0x60) aqui competia
+         * com a IRQ12 e roubava bytes do stream, desalinhando pacotes de
+         * 3 bytes (flags sem bit 0x08). O handler IRQ ja consome via
+         * mouse_handler() -> mouse_process_byte() + mice_push(). */
+        // (polling desabilitado — ver mouse_handler IRQ12)
+        usb_poll();
+        /* ~~ Yield pro scheduler!~~ Sem isso processo em background
+         * ("exec XORG &") nunca rodava: o irq0 so preempta quem ta
+         * em ring 3, e o shell vive em ring 0~ rssrsrs */
+        /* ~~ Agenda FORA da interrupção (flag vem do tick)! ~~
+         * Trocar de contexto DENTRO do irq0 abandonava o frame da
+         * interrupção e o kernel voltava pela metade~ rssrsrs */
+        if (need_sched) { need_sched = 0; schedule(); }
+        proc_yield();
+        __asm__ volatile("hlt");
+    }
+}
+
+/* ♥ kernel.c ~ se bugar me chama, se n bugar tb me chama ~ >u< */

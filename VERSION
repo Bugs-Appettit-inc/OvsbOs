@@ -1,0 +1,8 @@
+v0.8.0
+
+Formato: v0.STAGE.RELEASE.FEATURE
+  STAGE   = 8 = Desktop Wayland (ovsb-desktop: wallpaper + barra +
+                relogio) sobre compositor + WM com titlebar
+  RELEASE = 0 = base Wayland validada (foco, z-order, mover, resize,
+                wlr-layer-shell, purge-on-disconnect)
+  FEATURE = 0 = conjunto inicial desta release
