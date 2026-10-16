@@ -225,6 +225,7 @@ void fds_close_exec(void *tab) {
 #define FD_EPOLL      10
 #define FD_EVDEV      11
 #define FD_MEMFD      12
+#define FD_DRM        13
 
 /* ~~ pipes (issue #52) ~~ um buffer por pipe, read/write pos separados */
 #define MAX_PIPES 8
@@ -521,6 +522,10 @@ static int open_dev_impl(const char *path, int flags) {
         /* ~~ evdev pro libinput do Xorg ~~
          * event0 = mouse, event1 = teclado (checado pelo nome no read/ioctl) */
         type = FD_EVDEV;
+    } else if (str_equal(path, "/dev/dri/card0") ||
+               str_equal(path, "/dev/dri/renderD128") ||
+               str_equal(path, "/dev/virtio-gpu0")) {
+        type = FD_DRM;
     } else if (path[0] == '/' && path[1] == 'd' && path[2] == 'e' && path[3] == 'v' &&
                path[4] == '/' && path[5] == 't' && path[6] == 't' && path[7] == 'y' &&
                path[8] >= '0' && path[8] <= '9' && path[9] == '\0') {
@@ -2940,6 +2945,18 @@ void syscall_handler(uint64_t *regs) {
             break;
         }
         // memfd mmap MAP_SHARED shared object
+        if (!(flags & 0x20) && mfd >= 3 && mfd < MAX_FDS && fds[mfd].used && fds[mfd].type == FD_DRM) {
+            extern uint64_t drm_mmap_dumb(uint64_t pml4, uint64_t off,
+                                          uint64_t len);
+            uint64_t map_off2 = regs[6];
+            pcb_t *cur2 = process_current();
+            uint64_t va = 0;
+            if (cur2)
+                va = drm_mmap_dumb(cur2->pml4, map_off2, len);
+            if (!va) { ret = (uint64_t)-1; break; }
+            ret = va;
+            break;
+        }
         if (!(flags & 0x20) && mfd >= 3 && mfd < MAX_FDS && fds[mfd].used && fds[mfd].type == FD_MEMFD) {
             int mi = fds[mfd].memfd_idx;
             if (mi<0||mi>=MAX_MEMFD||!g_memfds[mi].used){ ret=(uint64_t)-1; break; }
@@ -3387,6 +3404,11 @@ void syscall_handler(uint64_t *regs) {
             }
             /* default: aceita e ignora, como o resto do ioctl~ */
             ret = 0; break;
+        }
+        if (fd >= 0 && fd < MAX_FDS && fds[fd].used && fds[fd].type == FD_DRM) {
+            extern int drm_ioctl(unsigned long req, void *argp);
+            ret = (uint64_t)(long)drm_ioctl(req, argp);
+            break;
         }
         if (fd >= 0 && fd < MAX_FDS && fds[fd].used &&
             (fds[fd].type == FD_TTY_MASTER || fds[fd].type == FD_TTY_SLAVE)) {
