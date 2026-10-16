@@ -1,0 +1,12 @@
+9d4ff25 limpa: caça-bugs nos apps/libs/tools (enter, undo, fill, token, preview, png, oep) + chip8
+c3f406b suprema: fase 6 dev inside (editor hl/replace/lnum, oasm, omake, oman)
+e936e58 suprema: fase 5 auditoria kernel (40 arqs) + memcpy exato + decl + docs melhorias
+422ebc3 suprema: fase 4 empacotador oep/odk (pack/list/unpack/run, 4 apps empacotados)
+39c0e3b suprema: fase 3 lib de imagens (bmp+ppm+png inflate proprio, integracao paint/fm/editor)
+ca6f74b suprema: fase 2 apps consolidados (build limpo, validacao, screenshots ppm)
+5445dab chore: snapshot tarefa suprema
+ab355e2 noite: atualiza git-log.txt
+365534a noite: ignora binarios host dos apps (rebuild via make)
+12712c8 noite: apps base + auditoria kernel + fix TLB mprotect + hipotese +0x68
+359e443 chore: snapshot pré-auditoria noturna
+2899c6b feat(ovsbos): desktop Wayland + WM + titlebar + menu
