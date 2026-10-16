@@ -1,21 +1,27 @@
-CC = gcc
+# oep-tools: pack/info/unpack/run (multi-call por argv0).
+# SEM SIMD (regra do projeto): -mno-sse -mno-mmx -mgeneral-regs-only.
+CC ?= gcc
 CFLAGS = -O2 -Wall -Wextra -Werror -std=c99 -mno-sse -mno-mmx -mgeneral-regs-only
+# inside-OvsbOS: estático (sem loader Linux no OvsbOS). Host pode usar
+# `make HOST=1` (dinâmico).
+ifeq ($(HOST),1)
+STATIC =
+else
+STATIC = -static
+endif
 
-all: oep-pack oep-unpack oep-list oep-run
+HDR = ../../libs/oep/oep.h ../../libs/oep/sha256.h
+LIB = ../../libs/oep/sha256.c
 
-oep-pack: oep.c
-	$(CC) $(CFLAGS) -o $@ oep.c
+all: oep-pack oep-info oep-unpack oep-run
 
-oep-unpack: oep.c
-	$(CC) $(CFLAGS) -o $@ oep.c
-
-oep-list: oep.c
-	$(CC) $(CFLAGS) -o $@ oep.c
-
-oep-run: oep.c
-	$(CC) $(CFLAGS) -o $@ oep.c
+oep-pack oep-info oep-unpack oep-run: oep.c $(HDR)
+	$(CC) $(CFLAGS) $(STATIC) -o oep-pack     oep.c $(LIB)
+	ln -sf oep-pack oep-info
+	ln -sf oep-pack oep-unpack
+	ln -sf oep-pack oep-run
 
 clean:
-	rm -f oep-pack oep-unpack oep-list oep-run
+	rm -f oep-pack oep-info oep-unpack oep-run
 
 .PHONY: all clean
