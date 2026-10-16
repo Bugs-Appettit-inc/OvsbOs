@@ -101,6 +101,17 @@ export fn mouse_init() void {
     _ = mouse_read_byte();
     mouse_write(0xF4);
     _ = mouse_read_byte();
+    // Drena bytes obsoletos do AUX (sem isso, um byte perdido aqui
+    // desalinha o ciclo 0→1→2 pra sempre e o cursor "anda sozinho").
+    // Só consome se status disser AUX (bit5): nunca rouba do teclado.
+    {
+        var i: u32 = 0;
+        while (i < 16) : (i += 1) {
+            if ((inb(0x64) & 0x21) != 0x21) break;
+            _ = inb(0x60);
+        }
+    }
+    mouse_cycle = 0;
 }
 
 // ~~ mouse_process_byte ~~
@@ -129,6 +140,10 @@ export fn mouse_process_byte(d: u8) void {
             mouse_packet[2] = d;
             mouse_cycle = 0;
             const flags: u8 = mouse_packet[0];
+            // Overflow (bits 6/7): movimento rápido demais pro contador
+            // de 9 bits — dx/dy não confiáveis. Padrão: DESCARTA o pacote
+            // (antes aplicava lixo e o cursor pulava "sozinho").
+            if ((flags & 0xC0) != 0) return;
             // Cast direto via i8: extende sinal corretamente sem depender de flag.
             // O flag 0x10/0x20 eh redundante com o bit7 do dx/dy em modo PS/2.
             const dx: i32 = @as(i8, @bitCast(mouse_packet[1]));

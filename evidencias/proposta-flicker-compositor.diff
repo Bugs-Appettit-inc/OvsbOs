@@ -72,3 +72,16 @@ index a6d5611..cbbd827 100644
  }
  // ---- input real via evdev (espelha wayland_compositor_shm.c) ----
  static uint32_t ev_time=1000;
+
+=== PARTE 2 (pendente de aprovação): silenciar logs do hot path ===
+Motivo: serial a 38400 (agora 115200 no kernel) com busy-wait por char;
+cada motion gera fill 1280x800 + 2-4 blits, cada blit 2 linhas de log
+(~13ms/linha a 38400). O flood de log É parte do congelamento.
+Proposta (mesmo arquivo, só guarda-if, sem mudar lógica):
+
+    static int wl_log_hot = 0; /* 1 = loga blits (debug) */
+    // em fb_blit_shm: if(wl_log_hot){ ...snprintf blit...; ...fb pixel...; }
+    // + habilita via variável de ambiente WL_LOG_HOT=1 (getenv uma vez).
+
+Com cursor fast-path (PARTE 1) + Parte 2, o custo por motion cai de
+~50ms+fill-inteiro para <1ms (12x16px + zero serial).

@@ -29,7 +29,11 @@ static inline uint8_t inb(uint16_t port) {
 /* ~ cuidado que essa aqui morde ~ */
 void serial_init(void) {
     outb(0x3F8 + 1, 0x00); outb(0x3F8 + 3, 0x80);
-    outb(0x3F8 + 0, 0x03); outb(0x3F8 + 1, 0x00);
+    /* divisor 1 = 115200 baud (era 3 = 38400: cada char a 260us afogava
+     * o compositor — cada motion gerava linhas de log e o sistema
+     * parecia congelado. QEMU captura serial virtual, baud irrelevante
+     * pra ele; hardware real precisa de 115200 no terminal). */
+    outb(0x3F8 + 0, 0x01); outb(0x3F8 + 1, 0x00);
     outb(0x3F8 + 3, 0x03); outb(0x3F8 + 2, 0xC7);
     outb(0x3F8 + 4, 0x0B);
 }

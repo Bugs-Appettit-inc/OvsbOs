@@ -37,3 +37,19 @@
 - Experimento poison revertido (falso-positivo por preempção) + append
   no PCB revertido (travava boot early — .bss maior; causa exata do
   hang em aberto, anotado p/ revisão).
+
+## 2026-10-16 (2): mouse sozinho + crash ~5s + performance
+- Serial 38400->115200 (`serial.c`): cada char custava 260us de busy-wait;
+  cada motion gerava fill 1280x800 + 2-4 blits + 4-8 linhas de log =
+  dezenas de ms por evento = "congelado". 3x mais rápido agora.
+- Mouse PS/2 (`mouse.zig`): pacotes com overflow (bits 6/7) eram aplicados
+  como lixo (pulos "sozinhos" em movimento rápido) -> agora descartados;
+  drain de bytes obsoletos do AUX no init (só bit5=status, nunca rouba
+  do teclado) + resync do ciclo.
+- Rajada de 60 motions headless: 0 faults, ticks vivos.
+- Crash ~5s: em headless o único evento é o filho do pre-warm (inofensivo,
+  pai sobrevive). Com display, suspeitos restantes: storm de motion
+  (mitigado acima) ou app lançado sem teclado (layers não recebem kbd:
+  foot/doom parecem "mortos" — limitação documentada, sem fix).
+- Mesa: re-confirmado fora do caminho (XORG comentado no boot).
+- Proposta do compositor estendida (Parte 2: log-gating) — segue pendente.
