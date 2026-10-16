@@ -13,7 +13,7 @@ endif
 # ♥ CFLAGS: freestanding (sem libc), no-red-zone, sem SSE/MMX~
 # Só registradores de propósito geral ~ modo 64 bits puro!
 CFLAGS := -ffreestanding -nostdlib -mno-red-zone -mno-mmx -mno-sse
-CFLAGS += -mgeneral-regs-only -m64 -O2 -Wall
+CFLAGS += -mgeneral-regs-only -m64 -O2 -Wall -Wno-frame-address
 # ♥ ZIGFLAGS: target freestanding, soft-float só, sem SIMD~
 ZIGFLAGS := -target x86_64-freestanding -mno-red-zone -O ReleaseSmall
 ZIGFLAGS += -mcpu x86_64+soft_float-mmx-sse-sse2-sse3-ssse3-sse4_1-sse4_2-avx-avx2

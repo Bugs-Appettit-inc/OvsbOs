@@ -163,9 +163,9 @@ uint64_t clone_identity_tables(void) {
             extern void serial_puts(const char *s);
             extern void serial_puthex(uint32_t v);
             serial_puts("[clone-pt] new_pd="); serial_puthex((uint32_t)((uint64_t)new_pd >> 32));
-            serial_puthex((uint32_t)new_pd);
-            serial_puts(" new_pt="); serial_puthex((uint32_t)new_pt);
-            serial_puts(" old_pt="); serial_puthex((uint32_t)old_pt);
+            serial_puthex((uint32_t)(uintptr_t)new_pd);
+            serial_puts(" new_pt="); serial_puthex((uint32_t)(uintptr_t)new_pt);
+            serial_puts(" old_pt="); serial_puthex((uint32_t)(uintptr_t)old_pt);
             serial_puts(" slot="); serial_puthex((uint32_t)new_pd[0x12]);
             serial_puts("\r\n");
         }

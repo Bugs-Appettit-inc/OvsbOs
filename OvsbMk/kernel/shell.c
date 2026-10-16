@@ -401,8 +401,10 @@ static void cmd_exec(const char *args) {
                     serial_puts(" atbase_off=");
                     /* varre TODOS os pares do auxv (do início ao AT_NULL)~~ */
                     int qi = 1;
-                    while (usp[qi] != 0) qi++; qi++; // argv NULL
-                    while (usp[qi] != 0) qi++; qi++; // envp NULL
+        while (usp[qi] != 0) qi++;
+        qi++; /* argv NULL */
+        while (usp[qi] != 0) qi++;
+        qi++; /* envp NULL */
                     /* agora é auxv~ */
                     while (!(usp[qi] == 0 && usp[qi+1] == 0)) {
                         if (usp[qi] == 7) serial_puts(" AT_BASE=");

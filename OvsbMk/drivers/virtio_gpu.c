@@ -322,7 +322,9 @@ static int cursor_setup(void) {
             (virtio_gpu_mem_entry_t *)((uint8_t *)a + sizeof(*a));
         virtio_gpu_ctrl_hdr_t *r = kmalloc(sizeof(*r));
         if (!a || !r) {
-            if (a) kfree(a); if (r) kfree(r); return -1;
+        if (a) kfree(a);
+        if (r) kfree(r);
+        return -1;
         }
         a->hdr.type = 0x0106;
         a->hdr.flags = 0;

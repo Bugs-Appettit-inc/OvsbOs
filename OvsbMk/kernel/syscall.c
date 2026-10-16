@@ -3582,8 +3582,12 @@ void syscall_handler(uint64_t *regs) {
             uint32_t lm = W * 24 / 1024, rm = W * 160 / 1024,
                      hs = W * 136 / 1024, um = H * 3 / 768,
                      bmm = H * 29 / 768, vs = H * 6 / 768;
-            if (!lm) lm = 24; if (!rm) rm = 160; if (!hs) hs = 136;
-            if (!um) um = 3; if (!bmm) bmm = 29; if (!vs) vs = 6;
+    if (!lm) lm = 24;
+    if (!rm) rm = 160;
+    if (!hs) hs = 136;
+    if (!um) um = 3;
+    if (!bmm) bmm = 29;
+    if (!vs) vs = 6;
             uint32_t htotal = W + lm + rm + hs;
             uint32_t vtotal = H + um + bmm + vs;
             uint64_t pixclk = 1000000000000ULL / (60ULL * htotal * vtotal);
@@ -4570,7 +4574,7 @@ void syscall_handler(uint64_t *regs) {
         if (me) me->user_rsp = newrsp;
         {
             extern void serial_puthex(uint32_t v);
-            serial_puts("[exec-stk] ustack="); serial_puthex((uint32_t)ustack);
+            serial_puts("[exec-stk] ustack="); serial_puthex((uint32_t)(uintptr_t)ustack);
             serial_puts(" newtop="); serial_puthex((uint32_t)newtop);
             serial_puts(" newrsp="); serial_puthex((uint32_t)newrsp);
             serial_puts(" kstack="); serial_puthex((uint32_t)(me ? me->rsp0 : 0));

@@ -123,9 +123,9 @@ static inline void watch_hit(const char *tag, void *ptr) {
     extern void serial_puthex(uint32_t v);
     serial_puts(tag);
     serial_puthex((uint32_t)((uint64_t)ptr >> 32));
-    serial_puthex((uint32_t)(uint64_t)ptr);
+    serial_puthex((uint32_t)(uintptr_t)ptr);
     serial_puts(" ret=");
-    serial_puthex((uint32_t)(uint64_t)__builtin_return_address(1));
+    serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(1));
     serial_puts("\r\n");
 }
 
@@ -393,7 +393,7 @@ static void buddy_free(void *addr, int order) {
                 dfc++;
                 serial_puts("[BUD-FREE-LIVE] pa="); serial_puthex((uint32_t)phys);
                 serial_puts(" ord="); serial_puthex((uint32_t)order);
-                serial_puts(" ret="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
+                serial_puts(" ret="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
                 serial_puts("\r\n");
             }
         }
@@ -444,15 +444,15 @@ static void *slab_alloc(kmem_cache_t *cache) {
             if (((uint64_t)obj & ~0xFFFULL) != (uint64_t)s) {
                 extern void serial_puts(const char *s);
                 extern void serial_puthex(uint32_t v);
-                serial_puts("[SLAB-BAD] slab="); serial_puthex((uint32_t)s);
-                serial_puts(" free="); serial_puthex((uint32_t)obj);
+                serial_puts("[SLAB-BAD] slab="); serial_puthex((uint32_t)(uintptr_t)s);
+                serial_puts(" free="); serial_puthex((uint32_t)(uintptr_t)obj);
                 serial_puts(" cid="); serial_puthex((uint32_t)cache->id);
-                serial_puts(" ret0="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
-                serial_puts(" ret1="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(1));
+                serial_puts(" ret0="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
+                serial_puts(" ret1="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(1));
                 serial_puts("\r\n  chain:");
                 { int n = 0; slab_t *w = cache->slabs;
                   while (w && n < 16) {
-                      serial_puts(" "); serial_puthex((uint32_t)w);
+                      serial_puts(" "); serial_puthex((uint32_t)(uintptr_t)w);
                       serial_puts(":"); serial_puthex(w->magic);
                       w = w->next; n++; }
                   if (w) serial_puts(" ...LOOP/OVF");
@@ -550,10 +550,10 @@ static void *pcpu_slab_alloc(kmem_cache_t *cache) {
             if (os->magic != SLAB_MAGIC || os->cache != cache) {
                 extern void serial_puts(const char *s);
                 extern void serial_puthex(uint32_t v);
-                serial_puts("[PCPU-POISON] obj="); serial_puthex((uint32_t)o);
+                serial_puts("[PCPU-POISON] obj="); serial_puthex((uint32_t)(uintptr_t)o);
                 serial_puts(" magic="); serial_puthex(os->magic);
                 serial_puts(" id="); serial_puthex(id);
-                serial_puts(" ret="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
+                serial_puts(" ret="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
                 serial_puts("\r\n");
             }
         }
@@ -710,19 +710,19 @@ void kfree(void *ptr) {
             if ((uint64_t)cchk < (uint64_t)kmalloc_caches ||
                 (uint64_t)cchk >= (uint64_t)&kmalloc_caches[CACHE_COUNT]) {
                 extern void serial_puthex(uint32_t v);
-                serial_puts("[SLAB-BADID] ptr="); serial_puthex((uint32_t)ptr);
+                serial_puts("[SLAB-BADID] ptr="); serial_puthex((uint32_t)(uintptr_t)ptr);
                 serial_puts(" cache="); serial_puthex((uint32_t)(uint64_t)cchk);
-                serial_puts(" ret="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
+                serial_puts(" ret="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
                 serial_puts("\r\n");
                 return;
             }
             int id = cchk->id;
             if (id < 0 || id >= (int)CACHE_COUNT) {
                 extern void serial_puthex(uint32_t v);
-                serial_puts("[SLAB-BADID] ptr="); serial_puthex((uint32_t)ptr);
+                serial_puts("[SLAB-BADID] ptr="); serial_puthex((uint32_t)(uintptr_t)ptr);
                 serial_puts(" cache="); serial_puthex((uint32_t)(uint64_t)s->cache);
                 serial_puts(" id="); serial_puthex((uint32_t)id);
-                serial_puts(" ret="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
+                serial_puts(" ret="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
                 serial_puts("\r\n");
                 return;
             }
@@ -730,9 +730,9 @@ void kfree(void *ptr) {
             for (int di = 0; di < pcpu_objects[id].count; di++) {
                 if (pcpu_objects[id].objs[di] == ptr) {
                     extern void serial_puthex(uint32_t v);
-                    serial_puts("[KFREE-DUP] ptr="); serial_puthex((uint32_t)ptr);
+                    serial_puts("[KFREE-DUP] ptr="); serial_puthex((uint32_t)(uintptr_t)ptr);
                     serial_puts(" id="); serial_puthex((uint32_t)id);
-                    serial_puts(" ret="); serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
+                    serial_puts(" ret="); serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
                     serial_puts("\r\n");
                     return;
                 }
@@ -851,7 +851,7 @@ int munmap_user(void *addr, size_t length) {
             extern void serial_puthex(uint32_t v);
             serial_puts("[munmap-user] pa="); serial_puthex((uint32_t)a);
             serial_puts(" ret=");
-            serial_puthex((uint32_t)(uint64_t)__builtin_return_address(0));
+            serial_puthex((uint32_t)(uintptr_t)__builtin_return_address(0));
             serial_puts("\r\n");
         }
     }

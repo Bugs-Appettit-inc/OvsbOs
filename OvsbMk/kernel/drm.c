@@ -139,8 +139,6 @@ int drm_ioctl(unsigned long req, void *argp) {
         struct drm_mode_create_dumb_s *d = argp;
         int i, h = -1;
         uint64_t sz;
-        void *raw;
-        uint64_t base;
         if (!d->width || !d->height || d->width > 4096 || d->height > 4096)
             return -22;
         for (i = 0; i < DRM_MAX_DUMB; i++)

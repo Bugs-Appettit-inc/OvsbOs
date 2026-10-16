@@ -47,7 +47,7 @@ static pcb_t *alloc_pcb(void) {
 }
 
 /* ~ cuidado que essa aqui morde ~ */
-static int find_pid(int pid) {
+static int __attribute__((unused)) find_pid(int pid) {
     for (int i = 0; i < MAX_PROC; i++)
         if (pcb_table[i].pid == pid) return i;
     return -1;
@@ -401,8 +401,8 @@ int proc_waitpid(int pid, int *exit_code) {
                     if (exit_code) *exit_code = pcb_table[i].exit_code;
                     munmap_user((void *)(pcb_table[i].rsp0 - STACK_SIZE), STACK_SIZE);
                     pml4_destroy(pcb_table[i].pml4);
-                    pcb_table[i].state = PROC_EMPTY;
-                    return pid;
+        pcb_table[i].state = PROC_EMPTY;
+        return pid;
                 }
                 /* ~~ poll-yield cooperativo (sem BLOCKED!): o
                  * context_switch sempre iretqa pra USERSPACE, então
@@ -1017,7 +1017,7 @@ int proc_fork(uint64_t *parent_kframe) {
     {
         extern void serial_puts(const char *s);
         extern void serial_puthex(uint32_t v);
-        serial_puts("[fork] kstack="); serial_puthex((uint32_t)kstack);
+        serial_puts("[fork] kstack="); serial_puthex((uint32_t)(uintptr_t)kstack);
         serial_puts(" rsp0="); serial_puthex((uint32_t)p->rsp0);
         serial_puts("\r\n");
     }

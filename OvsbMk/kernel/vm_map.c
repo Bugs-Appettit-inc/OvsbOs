@@ -213,7 +213,7 @@ void vm_map_init(vm_map_t *map, uint64_t min, uint64_t max) {
 }
 
 /* ~ simples mas essencial, n mexe sem saber oq ta fazendo */
-static int entry_covers(vm_map_entry_t *e, uint64_t start, uint64_t end) {
+static int __attribute__((unused)) entry_covers(vm_map_entry_t *e, uint64_t start, uint64_t end) {
     return e->start <= start && e->end >= end;
 }
 
