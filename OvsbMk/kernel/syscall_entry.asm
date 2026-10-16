@@ -60,7 +60,14 @@ syscall_entry:
     push rdi                    ; arg1
     push rsi                    ; arg2
     push rdx                    ; arg3
-    push rcx                    ; RIP return (salvo pela CPU)
+    ; Slot rcx do frame = ARG4 (r10), NUNCA o RIP de retorno: a CPU
+    ; clobberou rcx com o return RIP, e o handler C (via Zig) lê o
+    ; arg4 exatamente deste slot — inclusive p/ números TipOS nativos
+    ; (o fixup r10→rcx do Zig pulava os nativos e o kernel escrevia em
+    ; endereços selvagens, ex. PF@0). ABI Linux declara rcx CLOBBERED,
+    ; então nenhum userspace pode depender do valor restaurado; o
+    ; return RIP de verdade vive no save dedicado [rsp]/[rsp+8].
+    push r10                    ; arg4 (era: push rcx = return RIP)
     push rax                    ; syscall number
 
     ; ~~ RBX = ponteiro do frame de 15 regs (igual idt.asm faz pro
@@ -90,8 +97,8 @@ syscall_entry:
     pop r15
 
     ; ~~ Restaura return RIP/RFLAGS originais (ignora rcx do frame) ~~
-    ; O rcx popado acima pode ter sido corrompido pelo handler (arg4 fix)~
-    ; Aqui pegamos o valor original salvo ANTES do frame~
+    ; O slot rcx do frame carrega o ARG4 (r10) por construção — nunca o
+    ; return RIP. Aqui pegamos o valor original salvo ANTES do frame~
     ; (tipo guardar a senha num cofre antes de sair de casa~)
     mov r11, [rsp + 8]          ; return RFLAGS original
     mov rcx, [rsp]              ; return RIP original
