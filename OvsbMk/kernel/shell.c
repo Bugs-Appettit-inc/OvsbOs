@@ -641,7 +641,8 @@ void shell_init(void) {
     /* AUTO-BOOT Fase 8.1: compositor + desktop (foot manual via menu). */
     cmd_exec("/BIN/WAYLAND_COMPOSITOR_LIB &");
     sleep_ms(2000);
-    cmd_exec("/BIN/OVSB-DESKTOP &");
+    /* FASE-CONSOLIDA: desktop via .oep (valida o loader no boot). */
+    cmd_exec("/BIN/OVSB-DESK.OEP &");
     sleep_ms(2000);
     // cmd_exec("/BIN/FOOT");             // manual (via menu, Fase 8.2+)
     // Wayland lab: fb/evdev tested (FB_EVDEV_TEST on demand)

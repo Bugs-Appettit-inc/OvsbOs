@@ -294,7 +294,7 @@ static void draw_bar(uint32_t *pix, unsigned daysec){
 #define COL_MENU_BD 0xFF5A5A5Eu
 
 
-static struct { char path[80]; char name[MENU_NAME_C+1]; } menu_apps[MENU_MAXN];
+static struct { char path[80]; char name[MENU_NAME_C+1]; char cat[16]; } menu_apps[MENU_MAXN];
 static int menu_n=0;
 static int menu_open=0;
 static uint32_t menu_surf=0, menu_layer=0, menu_w=0, menu_h=0;
@@ -345,12 +345,20 @@ static int scan_dir(const char *dir){
 #else
                 int f=open(full,O_RDONLY);
                 if(f>=0){
-                    uint8_t mg[4]; ssize_t r=read(f,mg,4); close(f);
-                    if(r==4&&mg[0]==0x7f&&mg[1]=='E'&&mg[2]=='L'&&mg[3]=='F'){
+                    /* FASE-CONSOLIDA: launcher só .oep — magic "OEP\0" +
+                     * nome/categoria do header de 128B. ELF crus e testes
+                     * ficam de fora do menu. */
+                    uint8_t hd[64]; ssize_t r=lseek(f,0,SEEK_SET);
+                    r=read(f,hd,sizeof(hd)); close(f);
+                    if(r==(ssize_t)sizeof(hd)&&hd[0]=='O'&&hd[1]=='E'&&hd[2]=='P'&&hd[3]=='\0'){
                         int k=0; while(full[k] && k<79){ menu_apps[menu_n].path[k]=full[k]; k++; }
                         menu_apps[menu_n].path[k]=0;
-                        int i=0; while(nm[i] && i<MENU_NAME_C){ menu_apps[menu_n].name[i]=nm[i]; i++; }
+                        int i=0;
+                        while(i<32 && hd[4+12+i]){ menu_apps[menu_n].name[i]=(char)hd[16+i]; i++; }
+                        if(!i){ while(nm[i] && i<MENU_NAME_C){ menu_apps[menu_n].name[i]=nm[i]; i++; } }
                         menu_apps[menu_n].name[i]=0;
+                        i=0; while(i<15 && hd[48+i]){ menu_apps[menu_n].cat[i]=(char)hd[48+i]; i++; }
+                        menu_apps[menu_n].cat[i]=0;
                         menu_n++; added++;
                     }
                 }
@@ -363,14 +371,16 @@ static int scan_dir(const char *dir){
     close(dfd);
     return added;
 }
-/* ordena por nome (bolha; n<=40) p/ menu determinístico */
+/* ordena por categoria (headers de grupo) e nome (bolha; n<=40) */
 static void sort_apps(void){
     for(int i=0;i<menu_n;i++) for(int j=i+1;j<menu_n;j++){
-        if(strcmp(menu_apps[i].name,menu_apps[j].name)>0){
-            char tp[80], tn[MENU_NAME_C+1];
-            strcpy(tp,menu_apps[i].path); strcpy(tn,menu_apps[i].name);
+        int c=strcmp(menu_apps[i].cat,menu_apps[j].cat);
+        if(c>0||(!c&&strcmp(menu_apps[i].name,menu_apps[j].name)>0)){
+            char tp[80], tn[MENU_NAME_C+1], tc[16];
+            strcpy(tp,menu_apps[i].path); strcpy(tn,menu_apps[i].name); strcpy(tc,menu_apps[i].cat);
             strcpy(menu_apps[i].path,menu_apps[j].path); strcpy(menu_apps[i].name,menu_apps[j].name);
-            strcpy(menu_apps[j].path,tp); strcpy(menu_apps[j].name,tn);
+            strcpy(menu_apps[i].cat,menu_apps[j].cat);
+            strcpy(menu_apps[j].path,tp); strcpy(menu_apps[j].name,tn); strcpy(menu_apps[j].cat,tc);
         }
     }
 }
@@ -382,15 +392,16 @@ static void sort_apps(void){
 static int drow_kind[DROW_MAX];
 static int drow_n=0;
 static void build_drows(void){
-    int cur = 0; /* 0=nenhum, 1=BIN, 2=APPS */
+    /* FASE-CONSOLIDA: agrupa por categoria do header .oep. Linha
+     * drow_kind[r] >=0 = app; -i-1 = header "-- cat --" da app[i]. */
+    const char *cur = "";
     drow_n = 0;
     for(int i=0;i<menu_n && drow_n<DROW_MAX;i++){
-        int d = (menu_apps[i].path[1]=='B') ? 1 : 2;
-        if(d!=cur && drow_n+1<DROW_MAX){
-            cur = d;
-            drow_kind[drow_n++] = -d;
+        if(strcmp(menu_apps[i].cat,cur)!=0){
+            cur = menu_apps[i].cat;
+            drow_kind[drow_n++] = -i-1;
         }
-        if(drow_n<DROW_MAX) drow_kind[drow_n++] = i;
+        drow_kind[drow_n++] = i;
     }
 }
 /* FASE 8.4: ícones 12x12 por extensão (geométricos, sem bitmap externo:
@@ -439,11 +450,10 @@ static void draw_menu(uint32_t *pix){
         int y = MENU_PAD+r*MENU_ROW_H+4;
         if(drow_kind[r]<0){
             dtext(pix, menu_w, menu_h, 8, y,
-                  drow_kind[r]==-1 ? "-- BIN --" : "-- APPS --",
+                  menu_apps[-drow_kind[r]-1].cat,
                   0xFF808080u);
         } else {
-            draw_icon(pix, menu_w, menu_h, 8, y+1,
-                      icon_kind(menu_apps[drow_kind[r]].name));
+            draw_icon(pix, menu_w, menu_h, 8, y+1, 0);
             dtext(pix, menu_w, menu_h, 24, y,
                   menu_apps[drow_kind[r]].name, COL_TEXT);
         }
