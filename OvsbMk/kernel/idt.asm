@@ -95,7 +95,6 @@ ISR_NOERR 31
 ; (primeiro push = topo da stack = último offset no struct)~
 global syscall_isr
 extern syscall_handler_zig
-extern current_rsp0
 syscall_isr:
     ; A CPU ja empilhou SS, RSP, RFLAGS, CS, RIP (vindo do ring 3)
     push r15            ; salva todos os 15 GPRs ~ struct começa com r15
@@ -113,22 +112,8 @@ syscall_isr:
     push rdx             ; rdx = arg3
     push rcx             ; rcx = arg4 (count, flags)
     push rax             ; rax = syscall number
-    ; ~~ FASE1-redondo (+0x68): invariante current_rsp0 = USER RSP durante
-    ; o handler (igual o path `syscall` garante via xchg). Antes o int 0x80
-    ; nunca tocava no global: syscall_handler lia um valor STALE (kstack
-    ; de outro processo) como user_rsp do processo atual → PCB envenenado
-    ; (sinal forjado em kstack alheia, fork com RSP de kernel, xchg de
-    ; saída do path `syscall` em kstack errada → iretq p/ .text em ring 3).
-    ; Frame aqui (rsp->regs[0]): 15 GPRs + RIP/CS/RFLAGS/RSP(user)/SS. ~~
-    push rbx                    ; salva rbx do user
-    mov rbx, [rsp + 152]        ; rbx = USER RSP ([base+144], base=rsp+8)
-    push qword [current_rsp0]   ; salva global antigo
-    mov [current_rsp0], rbx     ; glob = user RSP (invariante!)
-    lea rbx, [rsp + 16]         ; rbx = ponteiro do frame (cf. syscall_entry)
-    lea rdi, [rsp + 16]         ; rdi = struct registers (regs[0])
+    mov rdi, rsp         ; rdi = ponteiro pra struct registers na stack
     call syscall_handler_zig  ; syscall_handler_zig(regs) em zig/c
-    pop qword [current_rsp0]    ; restaura global (rsp volta p/ regs[0]+8)
-    pop rbx                     ; restaura rbx do user (rsp volta p/ regs[0])
     pop rax              ; restaura rax (pode ter sido modificado como return value)
     pop rcx
     pop rdx

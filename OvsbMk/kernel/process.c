@@ -124,10 +124,7 @@ int process_create_user(const char *name, void *entry, void *user_stack, uint64_
     if (!kstack) return -1;
 
     pcb->pid = next_pid++;
-    /* ~~ FASE1-redondo: READY por ÚLTIMO (após forja do frame). Antes o
-     * slot ficava visível ao scheduler com kernel_rsp ainda não forjado;
-     * qualquer preempção na janela = pop-path em lixo (+0x68). ~~ */
-    pcb->state = PROC_EMPTY;   /* em forja: invisível ao scheduler */
+    pcb->state = PROC_READY;
     pcb->is_user = 1;
     pcb->in_kern = 0;
     pcb->user_rsp = (uint64_t)user_stack + user_stack_size;
@@ -154,7 +151,6 @@ int process_create_user(const char *name, void *entry, void *user_stack, uint64_
 
     pcb->cwd[0] = '/'; pcb->cwd[1] = '\0';
     setup_user_stack(pcb, entry, user_stack, user_stack_size);
-    pcb->state = PROC_READY;   /* frame forjado: agora pode rodar */
     return pcb->pid;
 }
 
@@ -175,7 +171,7 @@ int proc_spawn(const char *name, void *entry, void *user_stack_top) {
 
     pcb_t *p = &pcb_table[slot];
     p->pid = next_pid++;
-    p->state = PROC_EMPTY;   /* em forja: invisível ao scheduler */
+    p->state = PROC_READY;
     p->is_user = 1;
     p->in_kern = 0;
 
@@ -236,7 +232,6 @@ int proc_spawn(const char *name, void *entry, void *user_stack_top) {
     p->s_rbx = 0; p->s_rbp = 0; p->s_r12 = 0;
     p->s_r13 = 0; p->s_r14 = 0; p->s_r15 = 0;
 
-    p->state = PROC_READY;   /* frame forjado: agora pode rodar */
     return p->pid;
 }
 
@@ -1005,7 +1000,7 @@ int proc_fork(uint64_t *parent_kframe) {
 
     pcb_t *p = &pcb_table[slot];
     p->pid = next_pid++;
-    p->state = PROC_EMPTY;   /* em forja: invisível ao scheduler */
+    p->state = PROC_READY;
     p->is_user = 1;
     p->in_kern = 0;
     {
@@ -1143,7 +1138,6 @@ int proc_fork(uint64_t *parent_kframe) {
         extern int g_trace_window;
         g_trace_window = 60;   /* loga as próximas 60 syscalls completas~ */
     }
-    p->state = PROC_READY;   /* frame forjado: agora pode rodar */
     return p->pid;
 }
 
@@ -1189,7 +1183,7 @@ int proc_clone_thread(uint64_t flags, uint64_t newsp,
     for (int j = 0; j < (int)sizeof(pcb_t); j++)
         ((uint8_t *)p)[j] = 0;
     p->pid = next_pid++;
-    p->state = PROC_EMPTY;   /* em forja: invisível ao scheduler */
+    p->state = PROC_READY;
     p->is_user = 1;
     {
         int ni = 0;
@@ -1251,7 +1245,6 @@ int proc_clone_thread(uint64_t flags, uint64_t newsp,
     serial_puts(" fs=");
     serial_puthex((uint32_t)(p->fs_base >> 12));
     serial_puts("\r\n");
-    p->state = PROC_READY;   /* frame forjado: agora pode rodar */
     return p->pid;
 }
 
