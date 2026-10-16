@@ -700,6 +700,14 @@ int vm_mprotect(uint64_t addr, size_t size, int prot) {
     uint64_t end = addr + size;
     if (vm_map_protect(map, addr, end, prot) < 0) return -1;
     pml4_walk_ptes(cur->pml4, addr, end, pte_set_prot, &prot);
+    /* ~~ flush TLB apos troca de permissoes (W/U/NX): sem isso a CPU segue
+     * aplicando as permissoes ANTIGAS cacheadas e o processo morre com
+     * #PF err=0x15 (fetch em pagina "presente") de forma flaky sob churn
+     * de mmap/mprotect — ver evidencias/hipotese-final.md (bug +0x68).
+     * Mesmo padrao do vm_munmap (invlpg + barreira). ~~ */
+    for (uint64_t a = addr; a < end; a += 0x1000)
+        __asm__ volatile("invlpg (%0)" : : "r"(a) : "memory");
+    __sync_synchronize();
     return 0;
 }
 

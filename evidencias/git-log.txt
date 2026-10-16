@@ -1,0 +1,2 @@
+359e443 chore: snapshot pré-auditoria noturna
+2899c6b feat(ovsbos): desktop Wayland + WM + titlebar + menu

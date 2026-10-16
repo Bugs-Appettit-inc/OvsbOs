@@ -1,0 +1,11 @@
+--- a/OvsbMk/kernel/syscall_entry.asm
++++ b/OvsbMk/kernel/syscall_entry.asm
+@@ -121,6 +121,11 @@ syscall_entry:
+     mov [rsp - 16], rsp         ; RSP (user RSP original)
+     mov qword [rsp - 8], 0x23   ; SS (user data ring 3 — GDT 0x20)
+     sub rsp, 40
++    ; ~~ PROBE-4.1 (diagnostico, NAO commitar ligado): se o crash +0x68
++    ; mudar para este endereco, a corrupcao ocorre ANTES do iretq.
++    ; Experimento controlado via QEMU; remover apos o teste. ~~
++    int3
+     iretq

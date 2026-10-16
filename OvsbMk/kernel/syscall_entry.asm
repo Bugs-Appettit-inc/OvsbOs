@@ -116,7 +116,14 @@ syscall_entry:
     ; verdade — igual o context_switch faz. SEMPRE iretq! ~ ☆
     ; Frame: RIP CS RFLAGS RSP SS (5 qwords) montado no stack do user~
     ; (rsp = user RSP original aqui → campo RSP = rsp exato, sem conta!)
-    mov [rsp - 40], rcx         ; RIP (return original, não o arg4!)
+    ; NOTA DE AUDITORIA (noite/audit): as 6 instrucoes abaixo sao o ponto
+    ; cego entre o epilogo C e o iretq. Ordem importa: as 5 escritas vao
+    ; PARA BAIXO do rsp (red-zone do usuario) e so o `sub` final "publica"
+    ; o frame. IRQ/NMI chaveiam p/ kernel-stack via TSS (nao clobberam),
+    ; mas NAO ha validacao de que o user-RSP e canonico/user antes das
+    ; escritas — RSP selvagem = #PF em CPL0 em vez de PF-KILL limpo.
+    ; Se precisar mexer aqui, releia evidencias/hipotese-final.md antes.
+    mov [rsp - 40], rcx         ; (1) RIP (return original, não o arg4!)
     mov qword [rsp - 32], 0x1B  ; CS (user code ring 3 — GDT 0x18)
     mov [rsp - 24], r11         ; RFLAGS (return original)
     mov [rsp - 16], rsp         ; RSP (user RSP original)
