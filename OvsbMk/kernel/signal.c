@@ -267,21 +267,24 @@ void signal_dispatch_irq(uint64_t *registers) {
      * SEM int_no/err. Por isso:
      *   - invertemos os 15 GPRs ao montar `adapted` (senão o signo ia
      *     parar no rbp e o rt_sigreturn devolvia tudo permutado);
-     *   - regs[17] é RFLAGS (não RIP) e regs[18] é RSP ✓.
+     *   - RIP=regs[15], RFLAGS=regs[17], RSP=regs[18] (FASE1-redondo: era
+     *     [17]/[19]/[20] — shift +2 de quem achou que tinha int_no/err
+     *     como no isr_common; RFLAGS recebia o handler, SS recebia 0x202
+     *     e user_rsp lia lixo além do frame → #GP no iretq do tick).
      * E current_rsp0 NÃO é mexido: aqui não tem xchg de syscall — o
      * [current_rsp0] precisa continuar sendo o TOPO DA KSTACK, senão a
      * próxima syscall rodava o kernel em cima da pilha do usuário. ~~ */
     uint64_t saved_rsp0 = current_rsp0;
     uint64_t adapted[17];
     for (int index = 0; index < 15; index++) adapted[index] = registers[14 - index];
-    adapted[15] = registers[17];
-    adapted[16] = registers[19];
-    process->user_rsp = registers[20];
+    adapted[15] = registers[15];
+    adapted[16] = registers[17];
+    process->user_rsp = registers[18];
     signal_dispatch_syscall(adapted);
     for (int index = 0; index < 15; index++) registers[14 - index] = adapted[index];
-    registers[17] = adapted[15];
-    registers[19] = adapted[16];
-    registers[20] = process->user_rsp;
+    registers[15] = adapted[15];
+    registers[17] = adapted[16];
+    registers[18] = process->user_rsp;
     current_rsp0 = saved_rsp0;
 }
 

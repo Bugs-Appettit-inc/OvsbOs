@@ -100,6 +100,28 @@ static void kill_user_exc(uint64_t *regs, uint64_t exc, const char *why) {
     serial_puts(" err="); serial_puthex((uint32_t)regs[16]);
     serial_puts("\r\n");
     pcb_t *me = process_current();
+    /* ~~ FASE1-redondo: despeja o FRAME AUTORITATIVO do kernel (KRNL_RSP
+     * + 20 qwords = 15 regs + 5 iretq) + campos do PCB. O frame do user
+     * (regs[]) pode ser stale-but-plausível; o kernel é o que o
+     * context_switch vai poppar. Leitura só-kernel (identity) = segura
+     * em qualquer contexto (sem escrita em hot path). ~~ */
+    if (me) {
+        serial_puts("[KPCB] st="); serial_puthex((uint32_t)me->state);
+        serial_puts(" ink="); serial_puthex((uint32_t)me->in_kern);
+        serial_puts(" krsp="); serial_puthex((uint32_t)(me->kernel_rsp & 0xFFFFFFFF));
+        serial_puts(" ursp="); serial_puthex((uint32_t)(me->user_rsp & 0xFFFFFFFF));
+        serial_puts(" urip="); serial_puthex((uint32_t)(me->user_rip & 0xFFFFFFFF));
+        serial_puts("\r\n[KFRM]=");
+        {
+            uint64_t *kf = (uint64_t *)(uintptr_t)me->kernel_rsp;
+            for (int kfi = 0; kfi < 20; kfi++) {
+                serial_puthex((uint32_t)(kf[kfi] >> 32));
+                serial_puthex((uint32_t)kf[kfi]);
+                serial_putc(' ');
+            }
+        }
+        serial_puts("\r\n");
+    }
     int code = -128 - (int)exc;
     if (me && me->th_parent_pid >= 0)
         proc_thread_exit(code);       /* só a thread morre~ */
