@@ -4398,16 +4398,47 @@ void syscall_handler(uint64_t *regs) {
             ret = -1; break;
         }
         uint8_t *buf = kmalloc(fsize2 + 1);
+        uint8_t *buf_free = buf;
         if (!buf) { ret = -1; break; }
-        if (vfs_read_file(kpath, buf, fsize2) < 0 ||
-            !(buf[0]==0x7F && buf[1]=='E' && buf[2]=='L' && buf[3]=='F')) {
-            serial_puts("[execve] ELF invalido: "); serial_puts(kpath); serial_puts("\r\n");
-            kfree(buf); ret = -1; break;
+        if (vfs_read_file(kpath, buf, fsize2) < 0) {
+            serial_puts("[execve] read falhou: "); serial_puts(kpath); serial_puts("\r\n");
+            kfree(buf_free); ret = -1; break;
+        }
+        if (!(buf[0]==0x7F && buf[1]=='E' && buf[2]=='L' && buf[3]=='F')) {
+            /* ~~ .oep (Ovsb Executable Program): header fixo de 128 bytes
+             * (userspace/libs/oep/oep.h) seguido do ELF cru. Se o
+             * magic = "OEP\0", pula pro offset do ELF e segue a receita
+             * normal — o ELF deslocado e valido por construcao (todos
+             * e_phoff/p_offset sao relativos a base do ELF). Verificacao
+             * de SHA-256 fica nas ferramentas (oep-info). ~~ */
+            if (buf[0]=='O' && buf[1]=='E' && buf[2]=='P' && buf[3]=='\0' &&
+                fsize2 > 128) {
+                uint32_t oep_off = (uint32_t)buf[8] | ((uint32_t)buf[9]<<8) |
+                                   ((uint32_t)buf[10]<<16) | ((uint32_t)buf[11]<<24);
+                uint32_t oep_size = (uint32_t)buf[12] | ((uint32_t)buf[13]<<8) |
+                                    ((uint32_t)buf[14]<<16) | ((uint32_t)buf[15]<<24);
+                if (oep_off >= 128 && oep_off < fsize2 &&
+                    oep_size <= fsize2 - oep_off &&
+                    buf[oep_off]==0x7F && buf[oep_off+1]=='E' &&
+                    buf[oep_off+2]=='L' && buf[oep_off+3]=='F') {
+                    serial_puts("[execve] .oep ok: "); serial_puts(kpath);
+                    serial_puts("\r\n");
+                    buf += oep_off;
+                    fsize2 = oep_size;
+                } else {
+                    serial_puts("[execve] .oep invalido: "); serial_puts(kpath);
+                    serial_puts("\r\n");
+                    kfree(buf_free); ret = -1; break;
+                }
+            } else {
+                serial_puts("[execve] ELF invalido: "); serial_puts(kpath); serial_puts("\r\n");
+                kfree(buf_free); ret = -1; break;
+            }
         }
 
         /* 4. PML4 novo + U/S nos segmentos (receita do cmd_exec)~ */
         uint64_t child_pml4 = clone_identity_tables();
-        if (!child_pml4) { kfree(buf); ret = -1; break; }
+        if (!child_pml4) { kfree(buf_free); ret = -1; break; }
         Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buf;
         uint64_t elf_base = (ehdr->e_type == 3) ? elf64_pie_base() : 0;
         uint64_t elf_phdr = 0, elf_phent = ehdr->e_phentsize;
@@ -4437,7 +4468,7 @@ void syscall_handler(uint64_t *regs) {
         char interp_path[256];
         int interp_len = elf64_find_interp(buf, fsize2, interp_path, sizeof(interp_path));
         if (!entry) {
-            kfree(buf);
+            kfree(buf_free);
             pml4_destroy(child_pml4);
             ret = -1;
             break;
@@ -4446,7 +4477,7 @@ void syscall_handler(uint64_t *regs) {
             uint32_t interp_size = 0;
             uint8_t interp_attr = 0;
             if (vfs_stat_size(interp_path, &interp_size, &interp_attr) < 0 || !interp_size) {
-                kfree(buf);
+                kfree(buf_free);
                 pml4_destroy(child_pml4);
                 serial_puts("[execve] interp stat falhou: ");
                 serial_puts(interp_path);
@@ -4457,7 +4488,7 @@ void syscall_handler(uint64_t *regs) {
             unsigned char *interp_data = (unsigned char *)kmalloc(interp_size);
             if (!interp_data || vfs_read_file(interp_path, interp_data, interp_size) < 0) {
                 if (interp_data) kfree(interp_data);
-                kfree(buf);
+                kfree(buf_free);
                 pml4_destroy(child_pml4);
                 serial_puts("[execve] interp read falhou: ");
                 serial_puts(interp_path);
@@ -4470,7 +4501,7 @@ void syscall_handler(uint64_t *regs) {
                                                child_pml4, interp_base);
             kfree(interp_data);
             if (!interp_entry) {
-                kfree(buf);
+                kfree(buf_free);
                 pml4_destroy(child_pml4);
                 serial_puts("[execve] interp load falhou\r\n");
                 ret = -1;
@@ -4479,7 +4510,7 @@ void syscall_handler(uint64_t *regs) {
             entry = interp_entry;
             is_dynamic = 1;
         }
-        kfree(buf);
+        kfree(buf_free);
 
         /* 5. stack novo mapeado U/S no pml4 NOVO~ */
         void *ustack = mmap_user(0, EXECVE_STACK_SIZE, 3, 0);
