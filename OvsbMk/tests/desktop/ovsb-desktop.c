@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
 extern char **environ;
@@ -366,10 +367,23 @@ static void menu_close(int fd){
     dlog("[DESKTOP] menu fechado\n");
 }
 static void menu_try_open(int fd){
-    menu_n=0;
-    scan_dir("/BIN");
-    scan_dir("/APPS");
-    sort_apps();
+    /* cache: re-escaneia /BIN+/APPS só se mtime mudou (stat = 2 syscalls
+     * vs ~100 open/read por clique; além de rápido, encolhe a janela do
+     * crash +0x68 que morava nesse loop). */
+    static long cache_bin_mt=0, cache_apps_mt=0;
+    static int cache_valid=0;
+    struct stat stb;
+    long mt1=-1, mt2=-1;
+    if(stat("/BIN",&stb)==0) mt1=(long)stb.st_mtime;
+    if(stat("/APPS",&stb)==0) mt2=(long)stb.st_mtime;
+    if(!cache_valid || mt1!=cache_bin_mt || mt2!=cache_apps_mt){
+        menu_n=0;
+        scan_dir("/BIN");
+        scan_dir("/APPS");
+        sort_apps();
+        cache_bin_mt=mt1; cache_apps_mt=mt2; cache_valid=1;
+        { char l[64]; snprintf(l,sizeof(l),"[DESKTOP] menu rescan apps=%d\n",menu_n); dlog(l); }
+    }
     int rows=menu_n>0?menu_n:1;
     menu_w=MENU_W; menu_h=MENU_PAD*2+rows*MENU_ROW_H;
     if(menu_h>SCR_H-BAR_H) menu_h=SCR_H-BAR_H;
@@ -483,6 +497,7 @@ int main(void){
     dlog("[DESKTOP] bar committed\n");
     /* --- loop: ack configures + relógio REALTIME 1s + pointer --- */
     unsigned tick=0;
+    unsigned last_clk=0xFFFFFFFFu;
     int cfg=0;
     int ptr_sx=0, ptr_sy=0; // última posição (coords da surface)
     for(;;){
@@ -541,8 +556,14 @@ int main(void){
         if(d_clock_realtime(&ts)==0 && ts.tv_sec>0) daysec=(unsigned)(ts.tv_sec%86400);
         if(tick==0){ char l[64]; snprintf(l,sizeof(l),"[DESKTOP] epoch=%lld\n",(long long)ts.tv_sec); dlog(l); }
         tick++;
-        draw_bar(bar, daysec);
-        send_msg(fd,14,6,NULL,0); // commit (re-desenha relógio)
+        /* barra: redesenha+commit SÓ quando o segundo muda (antes era a
+         * cada wake do poll, inclusive por motion do mouse — tráfego
+         * inútil que compete com o repaint do compositor). */
+        if(daysec!=last_clk){
+            last_clk=daysec;
+            draw_bar(bar, daysec);
+            send_msg(fd,14,6,NULL,0); // commit (re-desenha relógio)
+        }
         if((tick&15)==0){ char l[64]; snprintf(l,sizeof(l),"[DESKTOP] tick %u cfg=%d clk=%u\n",tick,cfg,daysec); dlog(l); }
     }
     return 0;
