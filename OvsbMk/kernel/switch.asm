@@ -92,10 +92,30 @@ context_switch_kern:
     mov [rdi + FS_BASE], rax
 
     ; ~~ restore: depende de COMO o next foi salvo!~~
+    ; ~~ FASE1-redondo (+0x68): in_kern desincronizado do KRNL_RSP mata o
+    ; pop-path: se o processo bloqueou no meio de C (KRNL_RSP apontando
+    ; pra C call-chain com retornos 0x80xxxxxx) mas in_kern=0, os pops +
+    ; iretq leem slots de lixo do C-stack e o RIP vira .text do kernel
+    ; em ring 3 (else #GP/PF@syscall_entry). Valida o frame ANTES: o slot
+    ; CS do iretq (15 pops = [KRNL_RSP+120]) tem que ser 0x1B/0x08.
+    ; Se não for, o frame é C-stack → resume-C (consistente por
+    ; construção). Zero escrita em hot path além do branch já existente. ~~
     cmp dword [rsi + IN_KERN], 0
     jne .do_resume_kern
 
     ; ---- next salvo em MODO USUÁRIO: caminho clássico ----
+    ; VALIDAÇÃO: o CS do frame tem que parecer com iret-frame
+    mov rax, [rsi + KRNL_RSP]      ; não toca no KRNL_RSP ainda
+    mov rax, [rax + 120]           ; slot CS do iretq (15 qwords depois)
+    and rax, 0xFFFF
+    cmp rax, 0x1B                  ; user code ring 3
+    je .do_pop_path
+    cmp rax, 0x08                  ; kernel code (impossível p/ user, mas
+    je .do_pop_path                ; frame íntegro = pode poppar)
+    ; CS é lixo → frame NÃO é iret-frame: in_kern está mentindo.
+    jmp .do_resume_kern            ; resume o fluxo C (KRNL_RSP é C-stack)
+
+.do_pop_path:
     ; DEBUG N removed
     mov rsp, [rsi + KRNL_RSP]
     mov rax, [rsi + PML4]
@@ -194,7 +214,16 @@ context_switch:
     ; Restore next process state
     cmp dword [rsi + IN_KERN], 0   ; ~~ próximo bloqueou EM SYSCALL?~~
     jne context_switch_kern.restore_in_kern   ; volta NO MEIO do fluxo C~
-
+    ; ~~ FASE1-redondo: mesma validação do frame antes do pop-path ~~
+    mov rax, [rsi + KRNL_RSP]
+    mov rax, [rax + 120]           ; slot CS do iretq
+    and rax, 0xFFFF
+    cmp rax, 0x1B
+    je .pop_ok
+    cmp rax, 0x08
+    je .pop_ok
+    jmp context_switch_kern.restore_in_kern  ; frame C → resume-C
+.pop_ok:
     ; DEBUG U removed
     mov rsp, [rsi + KRNL_RSP]      ; 1. Troca RSP pro kernel stack do next ~
     mov rax, [rsi + PML4]          ; 2. Troca page tables (CR3) ~

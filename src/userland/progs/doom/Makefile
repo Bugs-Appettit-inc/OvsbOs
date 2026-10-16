@@ -31,5 +31,11 @@ FBTEST.ELF: fbtest.c $(USERLAND)/libc/crt0.c $(USERLAND)/libc/stdlib.c
 DOOM.ELF: $(DOOM_SOURCES) tipOS_glue.c tipOS_doom.c tipOS_stubs.c $(LIBC_SOURCES)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ tipOS_doom.c tipOS_glue.c tipOS_stubs.c $(DOOM_SOURCES) $(LIBC_SOURCES)
 
+DOOMWL.ELF: $(DOOM_SOURCES) tipOS_wayland.c tipOS_doom.c tipOS_stubs.c $(LIBC_SOURCES)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ tipOS_doom.c tipOS_wayland.c tipOS_stubs.c $(DOOM_SOURCES) $(LIBC_SOURCES)
+
+doomwl-install: DOOMWL.ELF
+	mcopy -o -i ../../disk.img DOOMWL.ELF ::/BIN/DOOMWL
+
 clean:
 	rm -f DOOM.ELF FBTEST.ELF

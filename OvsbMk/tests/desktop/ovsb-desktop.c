@@ -224,12 +224,48 @@ static void layer_surf(int fd, uint32_t shell, uint32_t comp, uint32_t out,
     send_msg(fd,shell,0,g,o); // get_layer_surface
 }
 
+
+/* FASE 8.3: apps lançados (single fork + reap assíncrono: sem zumbi
+ * por construção — filho direto, colhido no sweep do loop). */
+#define LAUNCH_MAX 16
+static struct { char name[27 /* =MENU_NAME_C+1 */]; int pid; } launched[LAUNCH_MAX];
+static int launched_n=0;
+
+/* FASE 8.3: janelas abertas (clique = mata; activate sem protocolo) */
+static int win_x0[LAUNCH_MAX], win_x1[LAUNCH_MAX], win_shown=0;
+static void win_layout(void){
+    int x = 104;
+    win_shown = 0;
+    for(int i=0;i<launched_n && win_shown<6;i++){
+        int nl=0; while(launched[i].name[nl]) nl++;
+        int wpx = nl*8+20;
+        if(x+wpx > SCR_W-90) break;
+        win_x0[win_shown]=x; win_x1[win_shown]=x+wpx;
+        x += wpx+4;
+        win_shown++;
+    }
+}
 /* redesenha a barra toda (botão + relógio uptime HH:MM:SS) */
 static void draw_bar(uint32_t *pix, unsigned daysec){
     dfill(pix, SCR_W, BAR_H, 0, 0, SCR_W, BAR_H, COL_BAR);
     // botão Iniciar
     dfill(pix, SCR_W, BAR_H, 4, 3, 94, 21, COL_BTN);
     dtext(pix, SCR_W, BAR_H, 12, 8, "Iniciar", COL_TEXT);
+    // FASE 8.3: janelas (win_layout define as faixas p/ clique)
+    {
+        win_layout();
+        for(int s=0;s<win_shown;s++){
+            int i=s, x=win_x0[s];
+            int nl=0; while(launched[i].name[nl]) nl++;
+            dfill(pix, SCR_W, BAR_H, x, 3, win_x1[s], 21, 0xFF1E4A6Eu);
+            dtext(pix, SCR_W, BAR_H, x+4, 8, launched[i].name, COL_TEXT);
+            {
+                int bx=win_x1[s]-10;
+                dfill(pix, SCR_W, BAR_H, bx, 8, bx+6, 14, 0xFFB03030u);
+            }
+            (void)nl;
+        }
+    }
     // relógio REALTIME (epoch do kernel; RTC via -rtc base=localtime)
     unsigned h=(daysec/3600)%24, m=(daysec/60)%60, s=daysec%60;
     char clk[16];
@@ -256,6 +292,7 @@ static void draw_bar(uint32_t *pix, unsigned daysec){
 #define MENU_NAME_C 26 /* chars por linha: (224-16)/8 */
 #define COL_MENU_BG 0xFF1E1E1Eu
 #define COL_MENU_BD 0xFF5A5A5Eu
+
 
 static struct { char path[80]; char name[MENU_NAME_C+1]; } menu_apps[MENU_MAXN];
 static int menu_n=0;
@@ -337,6 +374,59 @@ static void sort_apps(void){
         }
     }
 }
+/* FASE 8.4: linhas de exibição (headers de categoria intercalados).
+ * drow <0 = header (-1: /BIN, -2: /APPS); >=0 = índice em menu_apps.
+ * Agrupa runs contíguas do mesmo dir (lista já vem ordenada por nome).
+ * Search por nome: BLOQUEADO (layers não recebem teclado no compositor). */
+#define DROW_MAX 48
+static int drow_kind[DROW_MAX];
+static int drow_n=0;
+static void build_drows(void){
+    int cur = 0; /* 0=nenhum, 1=BIN, 2=APPS */
+    drow_n = 0;
+    for(int i=0;i<menu_n && drow_n<DROW_MAX;i++){
+        int d = (menu_apps[i].path[1]=='B') ? 1 : 2;
+        if(d!=cur && drow_n+1<DROW_MAX){
+            cur = d;
+            drow_kind[drow_n++] = -d;
+        }
+        if(drow_n<DROW_MAX) drow_kind[drow_n++] = i;
+    }
+}
+/* FASE 8.4: ícones 12x12 por extensão (geométricos, sem bitmap externo:
+ * 0=exec, 1=texto, 2=imagem). */
+static int icon_kind(const char *nm){
+    const char *d=nm;
+    while(*d) d++;
+    while(d>nm && d[-1]!='.') d--;
+    if(d>nm){
+        if(!strcmp(d,"txt")||!strcmp(d,"c")||!strcmp(d,"h")||
+           !strcmp(d,"md")||!strcmp(d,"log")) return 1;
+        if(!strcmp(d,"ppm")||!strcmp(d,"bmp")||!strcmp(d,"png")||
+           !strcmp(d,"xpm")) return 2;
+    }
+    return 0;
+}
+static void draw_icon(uint32_t *pix, int W, int H, int x, int y, int kind){
+    int i;
+    if(kind==1){ /* texto: folha branca + linhas */
+        dfill(pix,W,H,x,y,x+12,y+12,0xFFD0D0D0u);
+        for(i=0;i<3;i++)
+            dfill(pix,W,H,x+2,y+3+i*3,x+10,y+4+i*3,0xFF606060u);
+    } else if(kind==2){ /* imagem: montanha + sol */
+        dfill(pix,W,H,x,y,x+12,y+12,0xFF103018u);
+        dfill(pix,W,H,x+8,y+2,x+10,y+4,0xFFFFFF00u);
+        for(i=0;i<6;i++)
+            dfill(pix,W,H,x+1+i,y+11-i,x+11-i,y+11-i,0xFF00A000u);
+    } else { /* exec: caixa azul + seta */
+        dfill(pix,W,H,x,y,x+12,y+12,0xFF204080u);
+        dfill(pix,W,H,x+3,y+4,x+6,y+4,0xFFFFFFFFu);
+        dfill(pix,W,H,x+6,y+2,x+6,y+8,0xFFFFFFFFu);
+        dfill(pix,W,H,x+6,y+2,x+9,y+5,0xFFFFFFFFu);
+        dfill(pix,W,H,x+6,y+8,x+9,y+5,0xFFFFFFFFu);
+    }
+    (void)i;
+}
 static void draw_menu(uint32_t *pix){
     dfill(pix, menu_w, menu_h, 0, 0, menu_w, menu_h, COL_MENU_BD);
     dfill(pix, menu_w, menu_h, 1, 1, menu_w-1, menu_h-1, COL_MENU_BG);
@@ -344,23 +434,65 @@ static void draw_menu(uint32_t *pix){
         dtext(pix, menu_w, menu_h, 8, MENU_PAD+4, "(vazio)", COL_TEXT);
         return;
     }
-    for(int i=0;i<menu_n;i++)
-        dtext(pix, menu_w, menu_h, 8, MENU_PAD+i*MENU_ROW_H+4, menu_apps[i].name, COL_TEXT);
+    build_drows();
+    for(int r=0;r<drow_n;r++){
+        int y = MENU_PAD+r*MENU_ROW_H+4;
+        if(drow_kind[r]<0){
+            dtext(pix, menu_w, menu_h, 8, y,
+                  drow_kind[r]==-1 ? "-- BIN --" : "-- APPS --",
+                  0xFF808080u);
+        } else {
+            draw_icon(pix, menu_w, menu_h, 8, y+1,
+                      icon_kind(menu_apps[drow_kind[r]].name));
+            dtext(pix, menu_w, menu_h, 24, y,
+                  menu_apps[drow_kind[r]].name, COL_TEXT);
+        }
+    }
 }
-/* duplo fork + execve (neto herda; filho sai; pai colhe o filho) */
+/* colhe filhos mortos (apps que saíram); compacta; retorna vivos */
+static void reap_apps(void){
+    for(int i=0;i<launched_n;i++){
+        if(launched[i].pid<=0) continue;
+        int st=0; pid_t r=waitpid(launched[i].pid,&st,WNOHANG);
+        if(r==launched[i].pid){
+            char l[64];
+            snprintf(l,sizeof(l),"[DESKTOP] app saiu pid=%d\n",r);
+            dlog(l);
+            launched[i].pid=0;
+        }
+    }
+    {
+        int w=0;
+        for(int i=0;i<launched_n;i++)
+            if(launched[i].pid>0){
+                if(w!=i) launched[w]=launched[i];
+                w++;
+            }
+        launched_n=w;
+    }
+}
+/* fork simples + execve; filho DIRETO (reap no sweep). Sem duplo fork
+ * (órfão ia parar num pai que talvez nunca colha = zumbi eterno). */
 static void do_launch(const char *path){
     char l[96]; snprintf(l,sizeof(l),"[DESKTOP] launch %s\n",path); dlog(l);
-    pid_t mid=fork();
-    if(mid<0){ dlog("[DESKTOP] launch fork FAIL\n"); return; }
-    if(mid==0){
-        if(fork()==0){
-            char *const argv[]={ (char*)path, NULL };
-            execve(path, argv, environ);
-            _exit(127);
-        }
-        _exit(0);
+    reap_apps();
+    pid_t c=fork();
+    if(c<0){ dlog("[DESKTOP] launch fork FAIL\n"); return; }
+    if(c==0){
+        char *const argv[]={ (char*)path, NULL };
+        execve(path, argv, environ);
+        _exit(127);
     }
-    int st=0; waitpid(mid,&st,0);
+    if(launched_n<LAUNCH_MAX){
+        const char *b=path;
+        {
+            const char *s=path; while(*s){ if(*s=='/') b=s+1; s++; }
+        }
+        int i=0; while(b[i] && i<MENU_NAME_C){ launched[launched_n].name[i]=b[i]; i++; }
+        launched[launched_n].name[i]=0;
+        launched[launched_n].pid=c;
+        launched_n++;
+    }
 }
 static void menu_close(int fd){
     if(!menu_open) return;
@@ -469,7 +601,8 @@ static int menu_ensure(void){
 }
 static void menu_try_open(int fd){
     menu_ensure();
-    int rows=menu_n>0?menu_n:1;
+    build_drows();
+    int rows=drow_n>0?drow_n:1;
     menu_w=MENU_W; menu_h=MENU_PAD*2+rows*MENU_ROW_H;
     if(menu_h>SCR_H-BAR_H) menu_h=SCR_H-BAR_H;
     menu_surf=next_id; menu_layer=next_id+1;
@@ -667,9 +800,12 @@ static int run_session(int sess){
                     if(btn!=272 || st!=1) {} else if(menu_open){
                         if(enter_surf==(int)menu_surf){
                             int row=(ptr_sy-MENU_PAD)/MENU_ROW_H;
-                            if(row>=0 && row<menu_n && ptr_sx>=0 && (unsigned)ptr_sx<menu_w)
-                                do_launch(menu_apps[row].path);
-                            /* dentro do menu mas fora das linhas: ignora */
+                            if(row>=0 && row<drow_n && ptr_sx>=0 && (unsigned)ptr_sx<menu_w){
+                                int k=drow_kind[row];
+                                if(k>=0)
+                                    do_launch(menu_apps[k].path);
+                            }
+                            /* header ou fora: ignora */
                         } else {
                             menu_close(fd); /* clique-fora chegou pela barra */
                         }
@@ -677,6 +813,25 @@ static int run_session(int sess){
                               ptr_sx>=4 && ptr_sx<94 && ptr_sy>=3 && ptr_sy<21){
                         dlog("[DESKTOP] INICIAR click\n");
                         menu_try_open(fd);
+                    } else if(enter_surf==BAR_SURF_ID && ptr_sy>=3 &&
+                              ptr_sy<21){
+                        /* FASE 8.3: clique numa janela = mata (activate
+                         * exigiria protocolo no compositor). */
+                        int s;
+                        win_layout();
+                        for(s=0;s<win_shown;s++){
+                            if(ptr_sx>=win_x0[s] && ptr_sx<win_x1[s] &&
+                               launched[s].pid>0){
+                                char l[64];
+                                snprintf(l,sizeof(l),
+                                         "[DESKTOP] kill pid=%d (%s)\n",
+                                         launched[s].pid,
+                                         launched[s].name);
+                                dlog(l);
+                                kill(launched[s].pid, SIGTERM);
+                                break;
+                            }
+                        }
                     }
                 }
                 off+=size;
@@ -689,6 +844,7 @@ static int run_session(int sess){
         if(d_clock_realtime(&ts)==0 && ts.tv_sec>0) daysec=(unsigned)(ts.tv_sec%86400);
         if(tick==0){ char l[64]; snprintf(l,sizeof(l),"[DESKTOP] epoch=%lld\n",(long long)ts.tv_sec); dlog(l); }
         tick++;
+        if((tick&7)==0) reap_apps(); /* colhe apps mortos (sem zumbi) */
         /* barra: redesenha+commit SÓ quando o segundo muda (antes era a
          * cada wake do poll, inclusive por motion do mouse — tráfego
          * inútil que compete com o repaint do compositor). */
