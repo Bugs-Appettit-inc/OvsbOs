@@ -22,3 +22,18 @@
 - `evidencias/proposta-flicker-compositor.diff`: fast-path do cursor
   (salva/restaura caixa 12x16; invalida em qualquer blit/drag/resize;
   repaint total só em evento estrutural). ~165px vs ~1M px por motion.
+
+## Validado em 2026-10-16 (QEMU + HMP inject, 3 cliques reais)
+- `menu overlay criado 224x648 apps=40` em 3/3 cliques, fecha com
+  clique-fora, **0 PF-KILL** no log inteiro.
+- Fork-isolation: filho morreu 1x no teste anterior e o desktop seguiu
+  (menu abriu). Não zera mais a lista em falha (temp + commit).
+- Pre-warm no boot + `menu_ensure()` (valida) + retry implícito.
+- Desktop com retry-infinito noועים connect (race do boot resolvida).
+- memfd fechado após `send_msg_fd` (vazamento por abertura eliminado).
+- Instrumentação USTK no kernel (read-only, com guarda de page-walk):
+  frame iretq íntegro exceto slot RIP; stack do usuário saudável =
+  corrupção só no RIP de retorno (kernel segue investigando; DIAG).
+- Experimento poison revertido (falso-positivo por preempção) + append
+  no PCB revertido (travava boot early — .bss maior; causa exata do
+  hang em aberto, anotado p/ revisão).

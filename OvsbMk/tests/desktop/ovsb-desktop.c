@@ -24,6 +24,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
 extern char **environ;
@@ -207,6 +208,9 @@ static void *make_pool(int fd, uint32_t shm_id, uint32_t pool_id, int W, int H, 
     if(addr==MAP_FAILED||addr==NULL){ close(mfd); return NULL; }
     uint8_t b[8]; wr32(b,pool_id); wr32(b+4,sz);
     if(send_msg_fd(fd,shm_id,0,b,8,mfd)!=0){ close(mfd); return NULL; }
+    /* fd pode fechar: compositor já tem a cópia (SCM_RIGHTS) e o mmap
+     * persiste. Sem isso, cada abertura de menu vazava 2 memfds. */
+    close(mfd);
     *sz_out=sz;
     return addr;
 }
@@ -366,24 +370,105 @@ static void menu_close(int fd){
     menu_open=0; menu_surf=0; menu_layer=0;
     dlog("[DESKTOP] menu fechado\n");
 }
-static void menu_try_open(int fd){
-    /* cache: re-escaneia /BIN+/APPS só se mtime mudou (stat = 2 syscalls
-     * vs ~100 open/read por clique; além de rápido, encolhe a janela do
-     * crash +0x68 que morava nesse loop). */
+/* scan isolado em filho: o loop open/read e onde o +0x68 morde.
+ * O filho escaneia e devolve (path\0name\0)* pelo pipe; o pai espera até
+ * 5s. Se o filho morrer/tavar, o pai SEGUE com o cache antigo (ou vazio)
+ * — o clique NUNCA mais mata o desktop. Retorna apps coletados. */
+static int scan_child(const char *dir, int wfd){
+    int base=menu_n, sent=0;
+    scan_dir(dir);
+    for(int i=base;i<menu_n;i++){
+        size_t lp=strlen(menu_apps[i].path)+1;
+        size_t ln=strlen(menu_apps[i].name)+1;
+        if(write(wfd,menu_apps[i].path,lp)!=(ssize_t)lp) break;
+        if(write(wfd,menu_apps[i].name,ln)!=(ssize_t)ln) break;
+        sent++;
+    }
+    return sent;
+}
+/* Roda o scan-fork e preenche menu_apps. Retorna apps. Se der 0, NÃO
+ * valida o cache (próximo clique tenta de novo com filho fresco). */
+static int menu_rescan(void){
+    static struct { char path[80]; char name[MENU_NAME_C+1]; } tmp[MENU_MAXN];
+    int tmp_n=0;
+    int pfd[2];
+    if(pipe(pfd)!=0) return menu_n;
+    {
+        pid_t c=fork();
+        if(c==0){
+            close(pfd[0]);
+            scan_child("/BIN",pfd[1]);
+            scan_child("/APPS",pfd[1]);
+            close(pfd[1]);
+            _exit(0);
+        } else if(c>0){
+            close(pfd[1]);
+            /* coleta com deadline (filho crashado = EOF precoce) */
+            char rb[8192]; int rn=0, dead=0;
+            for(int w=0;w<100;w++){
+                int st=0; pid_t r=waitpid(c,&st,WNOHANG);
+                ssize_t n=read(pfd[0],rb+rn,sizeof(rb)-rn);
+                if(n>0) rn+=(int)n;
+                if(r==c){ dead=1; break; }
+                if(n<=0) usleep(50000);
+            }
+            close(pfd[0]);
+            if(!dead){ kill(c,SIGKILL); waitpid(c,0,0); }
+            /* parseia path\0name\0 p/ TEMP (mesmo parcial: vale).
+             * Só commita se >0: falha NUNCA zera a lista antiga. */
+            tmp_n=0;
+            {
+                int o=0;
+                while(o<rn && tmp_n<MENU_MAXN){
+                    int lp=0; while(o+lp<rn && rb[o+lp]) lp++;
+                    if(o+lp>=rn) break;
+                    int lo=o+lp+1, ln=0;
+                    while(lo+ln<rn && rb[lo+ln]) ln++;
+                    if(lo+ln>=rn) break;
+                    if(lp>0 && lp<80 && ln>0 && ln<=MENU_NAME_C){
+                        memcpy(tmp[tmp_n].path,rb+o,(size_t)lp+1);
+                        memcpy(tmp[tmp_n].name,rb+lo,(size_t)ln+1);
+                        tmp_n++;
+                    }
+                    o=lo+ln+1;
+                }
+            }
+            if(tmp_n>0){
+                for(int i=0;i<tmp_n;i++){
+                    memcpy(menu_apps[i].path,tmp[i].path,80);
+                    memcpy(menu_apps[i].name,tmp[i].name,MENU_NAME_C+1);
+                }
+                menu_n=tmp_n;
+                sort_apps();
+            }
+            {
+                char l[96];
+                snprintf(l,sizeof(l),"[DESKTOP] menu rescan apps=%d%s\n",
+                         tmp_n, dead?"":" (FILHO TRAVOU, mantida lista anterior)");
+                dlog(l);
+            }
+            return tmp_n;
+        }
+    }
+    return menu_n;
+}
+/* Garante cache válido (mtime): 1 = lista pronta (nova ou antiga). */
+static int menu_ensure(void){
     static long cache_bin_mt=0, cache_apps_mt=0;
     static int cache_valid=0;
     struct stat stb;
     long mt1=-1, mt2=-1;
     if(stat("/BIN",&stb)==0) mt1=(long)stb.st_mtime;
     if(stat("/APPS",&stb)==0) mt2=(long)stb.st_mtime;
-    if(!cache_valid || mt1!=cache_bin_mt || mt2!=cache_apps_mt){
-        menu_n=0;
-        scan_dir("/BIN");
-        scan_dir("/APPS");
-        sort_apps();
+    if(cache_valid && mt1==cache_bin_mt && mt2==cache_apps_mt) return 1;
+    if(menu_rescan()>0){
         cache_bin_mt=mt1; cache_apps_mt=mt2; cache_valid=1;
-        { char l[64]; snprintf(l,sizeof(l),"[DESKTOP] menu rescan apps=%d\n",menu_n); dlog(l); }
+        return 1;
     }
+    return menu_n>0; /* falhou mas tem lista antiga: serve */
+}
+static void menu_try_open(int fd){
+    menu_ensure();
     int rows=menu_n>0?menu_n:1;
     menu_w=MENU_W; menu_h=MENU_PAD*2+rows*MENU_ROW_H;
     if(menu_h>SCR_H-BAR_H) menu_h=SCR_H-BAR_H;
@@ -417,7 +502,10 @@ int main(void){
     struct sockaddr_un sa; memset(&sa,0,sizeof(sa)); sa.sun_family=AF_UNIX;
     strncpy(sa.sun_path,path,sizeof(sa.sun_path)-1);
     int tries=0; while(connect(fd,(struct sockaddr*)&sa,sizeof(sa))<0){
-        if(tries++>=200) return 1; usleep(100000);
+        /* retry infinito: no boot o compositor pode demorar (FAT lento);
+         * desistir aqui = desktop morto = sem barra/mouse. */
+        if((tries++%50)==0){ dlog("[DESKTOP] aguardando compositor...\n"); }
+        usleep(100000);
     }
     dlog("[DESKTOP] connected\n");
     uint8_t pl[4]; wr32(pl,2); send_msg(fd,1,1,pl,4); // registry -> 2
@@ -495,6 +583,8 @@ int main(void){
     { uint8_t b[12]; wr32(b,17); wr32(b+4,0); wr32(b+8,0); send_msg(fd,14,1,b,12); }
     send_msg(fd,14,6,NULL,0);
     dlog("[DESKTOP] bar committed\n");
+    /* pre-warm do menu em filho (não trava a barra se o scan morrer) */
+    menu_ensure();
     /* --- loop: ack configures + relógio REALTIME 1s + pointer --- */
     unsigned tick=0;
     unsigned last_clk=0xFFFFFFFFu;

@@ -250,6 +250,62 @@ void idt_handler(uint64_t *regs) {
             serial_puts(" OP=");
             for (int i = 0; i < 6; i++) { serial_puthex(ipb[i]); serial_putc(' '); }
         }
+        /* ~~ dump da stack do usuário no crash: 8 qwords em U_RSP, SOMENTE
+         * se o page-walk disser presente+user (sem isso, ler stack
+         *desmapeada = PF aninhado = double fault). Diz DE ONDE veio o RIP:
+         * return addresses na stack = stack smash; stack limpa = frame
+         * do trampolim/iretq malformado. ~~ */
+        {
+            uint64_t ursp = regs[20];
+            uint64_t c3;
+            __asm__ volatile("mov %%cr3, %0" : "=r"(c3));
+            if (ursp < 0x0000800000000000ULL && (ursp & 7) == 0) {
+                uint64_t *t4 = (uint64_t *)(uintptr_t)c3;
+                int i4 = (ursp >> 39) & 0x1FF, i3 = (ursp >> 30) & 0x1FF;
+                int i2 = (ursp >> 21) & 0x1FF, i1 = (ursp >> 12) & 0x1FF;
+                if ((t4[i4] & 7) == 7) {
+                    uint64_t *t3 = (uint64_t *)(uintptr_t)
+                        (t4[i4] & 0x000FFFFFFFFFF000ULL);
+                    if ((t3[i3] & 7) == 7) {
+                        uint64_t *t2 = (uint64_t *)(uintptr_t)
+                            (t3[i3] & 0x000FFFFFFFFFF000ULL);
+                        if ((t2[i2] & 7) == 7) {
+                            if (t2[i2] & 0x80) {
+                                uint64_t base =
+                                    (t2[i2] & 0x000FFFFFE00000ULL) +
+                                    ((uint64_t)(ursp & 0x1FFFFF));
+                                const uint64_t *stk =
+                                    (const uint64_t *)(uintptr_t)base - 8;
+                                serial_puts(" USTK=");
+                                for (int k = 0; k < 16; k++) {
+                                    serial_puthex(
+                                        (uint32_t)(stk[k] >> 32));
+                                    serial_puthex((uint32_t)stk[k]);
+                                    serial_putc(' ');
+                                }
+                            } else {
+                                uint64_t *t1 = (uint64_t *)(uintptr_t)
+                                    (t2[i2] & 0x000FFFFFFFFFF000ULL);
+                                if ((t1[i1] & 7) == 7) {
+                                    uint64_t base =
+                                        (t1[i1] & 0x000FFFFFFFFFF000ULL) +
+                                        (ursp & 0xFFF);
+                                    const uint64_t *stk =
+                                        (const uint64_t *)(uintptr_t)base - 8;
+                                    serial_puts(" USTK=");
+                                    for (int k = 0; k < 16; k++) {
+                                        serial_puthex(
+                                            (uint32_t)(stk[k] >> 32));
+                                        serial_puthex((uint32_t)stk[k]);
+                                        serial_putc(' ');
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
             }
             serial_puts("\r\n");
         /* ~~ DEMAND PAGING (user): região mapeada + página ausente
