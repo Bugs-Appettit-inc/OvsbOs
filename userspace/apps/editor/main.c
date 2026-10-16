@@ -208,6 +208,86 @@ static void term_clear(void) {
     printf("\033[H\033[2J");
 }
 
+static int g_hl = 0; /* 0=off 1=C 2=asm 3=sh */
+static int g_lnum = 0;
+
+static int is_wordch(char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_';
+}
+
+/* imprime linha com highlight ANSI; retorna void. */
+static void hl_print(const char *s, int n) {
+    static const char *kw_c =
+        "|int|char|long|short|void|static|const|unsigned|signed|struct|"
+        "enum|typedef|return|if|else|for|while|do|switch|case|break|"
+        "continue|sizeof|include|define|ifdef|ifndef|endif|";
+    static const char *kw_asm =
+        "|mov|add|sub|push|pop|call|ret|jmp|je|jne|jg|jl|cmp|test|xor|"
+        "and|or|lea|nop|int|iretq|syscall|xchg|rdmsr|wrmsr|invlpg|sti|cli|";
+    static const char *kw_sh =
+        "|if|then|else|fi|for|while|do|done|case|esac|function|return|"
+        "echo|exit|export|local|read|cd|ls|exec|trap|";
+    const char *kw = g_hl == 1 ? kw_c : g_hl == 2 ? kw_asm : kw_sh;
+    int i = 0;
+    while (i < n) {
+        char c = s[i];
+        if (c == '/' && g_hl == 1 && i + 1 < n && s[i + 1] == '/') {
+            printf("\033[32m");
+            while (i < n) putchar(s[i++]);
+            printf("\033[0m");
+            break;
+        }
+        if (c == '#' && (g_hl == 2 || g_hl == 3)) {
+            printf("\033[32m");
+            while (i < n) putchar(s[i++]);
+            printf("\033[0m");
+            break;
+        }
+        if (c == '"' || c == '\'') {
+            char q = c;
+            printf("\033[33m%c", c);
+            i++;
+            while (i < n && s[i] != q) {
+                if (s[i] == '\\' && i + 1 < n) {
+                    putchar(s[i]);
+                    i++;
+                }
+                putchar(s[i]);
+                i++;
+            }
+            if (i < n) putchar(s[i++]);
+            printf("\033[0m");
+            continue;
+        }
+        if (is_wordch(c) && (i == 0 || !is_wordch(s[i - 1]))) {
+            int j = i;
+            char w[32];
+            int k = 0;
+            while (j < n && is_wordch(s[j]) && k < 30) w[k++] = s[j++];
+            w[k] = 0;
+            {
+                char pat[34];
+                snprintf(pat, sizeof(pat), "|%s|", w);
+                if (strstr(kw, pat)) {
+                    printf("\033[1;36m%s\033[0m", w);
+                    i = j;
+                    continue;
+                }
+            }
+        }
+        if (c >= '0' && c <= '9' && (i == 0 || !is_wordch(s[i - 1]))) {
+            printf("\033[35m");
+            while (i < n && (is_wordch(s[i]) || s[i] == 'x' || s[i] == '.'))
+                putchar(s[i++]);
+            printf("\033[0m");
+            continue;
+        }
+        putchar(c == 0 ? '~' : c);
+        i++;
+    }
+}
+
 static void term_draw(int rows, int cols) {
     int y, x, li;
     (void)cols;
@@ -219,10 +299,14 @@ static void term_draw(int rows, int cols) {
             int n = g_len[li] - start;
             if (n < 0) n = 0;
             if (n > cols - 1) n = cols - 1;
-            for (x = 0; x < n; x++) {
-                char ch = g_buf[li][start + x];
-                putchar(ch == 0 ? '~' : ch);
-            }
+            if (g_lnum) printf("\033[90m%4d \033[0m", li + 1);
+            if (g_hl)
+                hl_print(&g_buf[li][start], n);
+            else
+                for (x = 0; x < n; x++) {
+                    char ch = g_buf[li][start + x];
+                    putchar(ch == 0 ? '~' : ch);
+                }
         } else {
             putchar('~');
         }
@@ -328,7 +412,17 @@ int main(int argc, char **argv) {
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--gui") == 0)
             use_gui = 1;
-        else if (strcmp(argv[i], "--dump-img") == 0) {
+        else if (strcmp(argv[i], "--ln") == 0)
+            g_lnum = 1;
+        else if (strncmp(argv[i], "--hl=", 5) == 0) {
+            if (strcmp(argv[i] + 5, "c") == 0) g_hl = 1;
+            else if (strcmp(argv[i] + 5, "asm") == 0) g_hl = 2;
+            else if (strcmp(argv[i] + 5, "sh") == 0) g_hl = 3;
+            else {
+                printf("hl: c|asm|sh\n");
+                return 1;
+            }
+        } else if (strcmp(argv[i], "--dump-img") == 0) {
             img_t *im;
             if (++i >= argc) {
                 printf("uso: editor --dump-img ARQUIVO\n");
@@ -374,6 +468,44 @@ int main(int argc, char **argv) {
             term_prompt("buscar: ", q, sizeof(q));
             if (!ed_find(q))
                 snprintf(g_msg, sizeof(g_msg), "nao achado: %s", q);
+        } else if (k == 18) {            /* Ctrl+R: substituir */
+            char q[128], r[128];
+            int cnt = 0, y, x, i2, j2;
+            size_t ql, rl;
+            term_prompt("substituir: ", q, sizeof(q));
+            term_prompt("por: ", r, sizeof(r));
+            ql = strlen(q);
+            rl = strlen(r);
+            if (ql > 0 && ql < MAXC && rl < MAXC) {
+                for (y = 0; y < g_nlines; y++) {
+                    x = 0;
+                    while (x + (int)ql <= g_len[y]) {
+                        int ok = 1;
+                        for (i2 = 0; i2 < (int)ql; i2++)
+                            if (g_buf[y][x + i2] != q[i2]) {
+                                ok = 0;
+                                break;
+                            }
+                        if (!ok) { x++; continue; }
+                        if (g_len[y] - (int)ql + (int)rl < MAXC) {
+                            memmove(&g_buf[y][x + rl],
+                                    &g_buf[y][x + ql],
+                                    (size_t)(g_len[y] - x - (int)ql));
+                            for (j2 = 0; j2 < (int)rl; j2++)
+                                g_buf[y][x + j2] = r[j2];
+                            g_len[y] += (int)rl - (int)ql;
+                            x += (int)rl;
+                            cnt++;
+                            g_dirty = 1;
+                        } else {
+                            x++;
+                        }
+                    }
+                }
+                snprintf(g_msg, sizeof(g_msg), "%d substituicoes", cnt);
+            }
+        } else if (k == 14) {            /* Ctrl+N: numeros de linha */
+            g_lnum = !g_lnum;
         } else if (k == APP_KEY_UP) {
             if (g_cy > 0) g_cy--;
         } else if (k == APP_KEY_DOWN) {
