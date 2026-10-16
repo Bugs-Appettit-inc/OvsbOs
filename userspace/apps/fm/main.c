@@ -17,6 +17,7 @@
 #include <sys/syscall.h>
 #include <sys/wait.h>
 #include "../ovsb_fb.h"
+#include "../../libs/image/image.h"
 
 #ifndef SYS_getdents64
 #define SYS_getdents64 217
@@ -120,6 +121,26 @@ static int fm_copyfile(const char *s, const char *d) {
     close(fi);
     close(fo);
     return r < 0 ? -1 : 0;
+}
+
+static void fm_preview(void) {
+    char full[MAXP];
+    img_t *im;
+    if (g_n == 0 || g_e[g_sel].is_dir) return;
+    snprintf(full, sizeof(full), "%s/%s", g_cwd, g_e[g_sel].name);
+    im = img_load(full);
+    if (!im) {
+        snprintf(g_msg, sizeof(g_msg), "%s: sem preview",
+                 g_e[g_sel].name);
+        return;
+    }
+    printf("\033[H\033[2J%s\n", full);
+    img_ascii(im, 72);
+    img_free(im);
+    printf("\n[Enter volta]\n");
+    fflush(stdout);
+    while (getchar() != '\n')
+        ;
 }
 
 static int fm_open_ext(void) {
@@ -278,6 +299,9 @@ static void tui_run(void) {
                 }
                 fm_list(g_cwd);
             }
+        } else if (line[0] == 'i') {
+            fm_preview();
+            fm_list(g_cwd);
         } else if (line[0] == 'o') {
             fm_open_ext();
             fm_list(g_cwd);

@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../ovsb_fb.h"
+#include "../../libs/image/image.h"
 
 #define MAXW 640
 #define MAXH 480
@@ -150,49 +151,32 @@ static void pfill(int x, int y, uint32_t c) {
 }
 
 static int ppm_save(const char *path) {
-    FILE *f = fopen(path, "wb");
-    int y, x;
-    if (!f) return -1;
-    fprintf(f, "P6\n%d %d\n255\n", g_w, g_h);
+    /* via libimage: formato pela extensao (.ppm/.bmp). */
+    img_t *im = img_new(g_w, g_h);
+    int y, x, r;
+    if (!im) return -1;
     for (y = 0; y < g_h; y++)
-        for (x = 0; x < g_w; x++) {
-            uint32_t c = g_cv[y * MAXW + x];
-            unsigned char b[3];
-            b[0] = (unsigned char)(c >> 16);
-            b[1] = (unsigned char)(c >> 8);
-            b[2] = (unsigned char)c;
-            if (fwrite(b, 1, 3, f) != 3) { fclose(f); return -1; }
-        }
-    fclose(f);
-    return 0;
+        for (x = 0; x < g_w; x++)
+            im->px[y * g_w + x] = g_cv[y * MAXW + x] & 0xFFFFFF;
+    r = img_save(im, path);
+    img_free(im);
+    return r;
 }
 
 static int ppm_load(const char *path) {
-    FILE *f = fopen(path, "rb");
-    int w = 0, h = 0, m = 0, y, x;
-    if (!f) return -1;
+    /* via libimage: .ppm/.bmp/.png. */
+    img_t *im = img_load(path);
+    int y, x, w, h;
+    if (!im) return -1;
     snapshot();
-    if (fscanf(f, "P6 %d %d %d", &w, &h, &m) != 3) {
-        fclose(f);
-        undo();
-        return -1;
-    }
-    if (w <= 0 || h <= 0 || w > MAXW || h > MAXH || m != 255) {
-        fclose(f);
-        undo();
-        return -1;
-    }
-    if (fgetc(f) == EOF) { fclose(f); undo(); return -1; }
+    w = im->w > MAXW ? MAXW : im->w;
+    h = im->h > MAXH ? MAXH : im->h;
     g_w = w;
     g_h = h;
     for (y = 0; y < h; y++)
-        for (x = 0; x < w; x++) {
-            unsigned char b[3];
-            if (fread(b, 1, 3, f) != 3) { fclose(f); undo(); return -1; }
-            g_cv[y * MAXW + x] =
-                ((uint32_t)b[0] << 16) | ((uint32_t)b[1] << 8) | b[2];
-        }
-    fclose(f);
+        for (x = 0; x < w; x++)
+            g_cv[y * MAXW + x] = im->px[y * im->w + x] & 0xFFFFFF;
+    img_free(im);
     return 0;
 }
 
@@ -200,7 +184,7 @@ static void cli_help(void) {
     printf("uso: paint --cli OP... | paint --gui\n"
            "  new W H C | line x0 y0 x1 y1 C | rect x0 y0 x1 y1 C [f]\n"
            "  ell x0 y0 x1 y1 C [f] | fill x y C | clear C | undo\n"
-           "  save F | load F   (PPM P6; C=0xRRGGBB ou 0-15)\n");
+           "  save F | load F   (ppm/bmp/png por extensao; C=0xRRGGBB ou 0-15)\n");
 }
 
 /* GUI via framebuffer: pledge interativo minimo. */

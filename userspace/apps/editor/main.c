@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "../ovsb_fb.h"
+#include "../../libs/image/image.h"
 
 #define MAXL 512
 #define MAXC 512
@@ -327,7 +328,21 @@ int main(int argc, char **argv) {
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--gui") == 0)
             use_gui = 1;
-        else if (argv[i][0] != '-') {
+        else if (strcmp(argv[i], "--dump-img") == 0) {
+            img_t *im;
+            if (++i >= argc) {
+                printf("uso: editor --dump-img ARQUIVO\n");
+                return 1;
+            }
+            im = img_load(argv[i]);
+            if (!im) {
+                printf("nao e imagem (bmp/ppm/png): %s\n", argv[i]);
+                return 1;
+            }
+            img_ascii(im, 72);
+            img_free(im);
+            return 0;
+        } else if (argv[i][0] != '-') {
             strncpy(g_path, argv[i], sizeof(g_path) - 1);
             g_path[sizeof(g_path) - 1] = 0;
         }
