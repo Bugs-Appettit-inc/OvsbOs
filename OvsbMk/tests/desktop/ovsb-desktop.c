@@ -630,7 +630,12 @@ static int run_session(int sess){
     int ptr_sx=0, ptr_sy=0; // última posição (coords da surface)
     for(;;){
         struct pollfd pf={fd,POLLIN,0};
-        if(poll(&pf,1,1000)>0 && (pf.revents&POLLIN)){
+        int pr=poll(&pf,1,1000);
+        if(pr>0 && (pf.revents&(POLLERR|POLLHUP|POLLNVAL))){
+            dlog("[DESKTOP] socket morto (ERR/HUP); caindo p/ respawn\n");
+            break;
+        }
+        if(pr>0 && (pf.revents&POLLIN)){
             ssize_t n=read(fd, buf+blen, sizeof(buf)-blen);
             if(n<=0) break;
             blen+=n;
