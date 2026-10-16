@@ -49,3 +49,13 @@ ovsb-term/ovsb.term
 ovsb-term/tests/test_grid
 ovsb-term/tests/test_escape
 ovsb-term/tests/test_scrollback
+
+# apps base (binarios host/static de teste; rebuild via userspace/apps)
+userspace/apps/*/editor
+userspace/apps/*/editor-st
+userspace/apps/*/paint
+userspace/apps/*/paint-st
+userspace/apps/*/fm
+userspace/apps/*/fm-st
+userspace/apps/*/shell
+userspace/apps/*/shell-st
