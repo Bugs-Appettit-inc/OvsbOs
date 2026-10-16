@@ -67,6 +67,7 @@ static __attribute__((unused)) int app_fb_init(app_fb_t *fb) {
         long r = app_raw_sys(200, (long)&addr, (long)&w, (long)&h,
                              (long)&pitch);
         if (r != 0 || addr == 0 || w == 0 || h == 0) return 0;
+        if (pitch < 4 || pitch / 4 > 16384) return 0;
         fb->pix = (uint32_t *)(uintptr_t)addr;
         fb->w = w;
         fb->h = h;

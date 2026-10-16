@@ -21,7 +21,8 @@
 static uint32_t g_cv[MAXW * MAXH];
 static int g_w = 320, g_h = 200;
 static uint32_t g_undo[UNDO_N][MAXW * MAXH];
-static int g_uw = 0, g_uh = 0, g_utop = 0, g_un = 0;
+static int g_uw[UNDO_N], g_uh[UNDO_N];
+static int g_utop = 0, g_un = 0;
 
 static const uint32_t g_pal[16] = {
     0x000000, 0xC00000, 0x00C000, 0xC0C000, 0x0000C0, 0xC000C0,
@@ -56,8 +57,8 @@ static uint32_t pget(int x, int y) {
 static void snapshot(void) {
     int i = g_utop % UNDO_N;
     memcpy(g_undo[i], g_cv, sizeof(g_cv));
-    g_uw = g_w;
-    g_uh = g_h;
+    g_uw[i] = g_w;
+    g_uh[i] = g_h;
     g_utop++;
     if (g_un < UNDO_N) g_un++;
 }
@@ -68,8 +69,8 @@ static int undo(void) {
     g_utop--;
     g_un--;
     i = (g_utop % UNDO_N + UNDO_N) % UNDO_N;
-    g_w = g_uw;
-    g_h = g_uh;
+    g_w = g_uw[i];
+    g_h = g_uh[i];
     memcpy(g_cv, g_undo[i], sizeof(g_cv));
     return 0;
 }
@@ -118,9 +119,10 @@ static void pell(int x0, int y0, int x1, int y1, uint32_t c, int fill) {
 }
 
 static void pfill(int x, int y, uint32_t c) {
-    /* flood fill com pilha explicita (sem recursao: imagem binaria ok). */
-    static int sx[MAXW * MAXH / 4];
-    static int sy[MAXW * MAXH / 4];
+    /* flood fill com pilha explicita tamanho-maximo: fill SEMPRE completa
+     * (pilha menor abortava no meio em canvas grande). */
+    static int sx[MAXW * MAXH];
+    static int sy[MAXW * MAXH];
     int n = 0;
     uint32_t tgt = pget(x, y);
     c &= 0xFFFFFF;
@@ -232,13 +234,20 @@ static void gui_run(void) {
             x0 = (int)mx;
             y0 = (int)my;
             if (tool == 0) pset(x0, y0, fg);
+            else if (tool == 1)
+                prect(x0 - 2, y0 - 2, x0 + 2, y0 + 2, 0x000000, 1);
             else if (tool == 5) pfill(x0, y0, fg);
         } else if (btn && pbtn && x0 >= 0) {
-            if (tool == 0) pline(x0, y0, (int)mx, (int)my, fg);
-            else if (tool == 1) {
-                x0 = (int)mx; y0 = (int)my;
+            if (tool == 0) {
+                pline(x0, y0, (int)mx, (int)my, fg);
+                x0 = (int)mx;
+                y0 = (int)my;
+            } else if (tool == 1) {
+                prect((int)mx - 2, (int)my - 2, (int)mx + 2, (int)my + 2,
+                      0x000000, 1);
+                x0 = (int)mx;
+                y0 = (int)my;
             }
-            if (tool == 0 || tool == 1) { x0 = (int)mx; y0 = (int)my; }
         } else if (!btn && pbtn && x0 >= 0) {
             if (tool == 2) { undo(); snapshot(); pline(x0, y0, (int)mx, (int)my, fg); }
             else if (tool == 3) { undo(); snapshot(); prect(x0, y0, (int)mx, (int)my, fg, 0); }
@@ -269,20 +278,20 @@ int main(int argc, char **argv) {
     while (i < argc) {
         const char *op = argv[i++];
         if (strcmp(op, "new") == 0 && i + 2 < argc) {
-            g_w = atoi(argv[i]);
-            g_h = atoi(argv[i + 1]);
-            if (g_w < 1) g_w = 1;
-            if (g_h < 1) g_h = 1;
-            if (g_w > MAXW) g_w = MAXW;
-            if (g_h > MAXH) g_h = MAXH;
-            {
-                uint32_t c = parse_color(argv[i + 2]);
-                int x, y;
-                for (y = 0; y < g_h; y++)
-                    for (x = 0; x < g_w; x++)
-                        g_cv[y * MAXW + x] = c;
-            }
-            snapshot();
+            int nw = atoi(argv[i]), nh = atoi(argv[i + 1]);
+            uint32_t c;
+            int x, y;
+            if (nw < 1) nw = 1;
+            if (nh < 1) nh = 1;
+            if (nw > MAXW) nw = MAXW;
+            if (nh > MAXH) nh = MAXH;
+            c = parse_color(argv[i + 2]);
+            snapshot(); /* ANTES de limpar: undo restaura o anterior */
+            g_w = nw;
+            g_h = nh;
+            for (y = 0; y < g_h; y++)
+                for (x = 0; x < g_w; x++)
+                    g_cv[y * MAXW + x] = c;
             i += 3;
         } else if (strcmp(op, "clear") == 0 && i < argc) {
             uint32_t c = parse_color(argv[i++]);
@@ -321,7 +330,7 @@ int main(int argc, char **argv) {
             }
         } else if (strcmp(op, "load") == 0 && i < argc) {
             if (ppm_load(argv[i++]) != 0) {
-                printf("erro ao carregar (PPM P6?)\n");
+                printf("erro ao carregar (ppm/bmp/png?): %s\n", argv[i - 1]);
                 return 1;
             }
         } else {

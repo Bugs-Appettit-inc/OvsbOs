@@ -59,3 +59,15 @@ userspace/apps/*/fm
 userspace/apps/*/fm-st
 userspace/apps/*/shell
 userspace/apps/*/shell-st
+userspace/apps/*/chip8
+userspace/apps/*/chip8-st
+userspace/libs/image/libimage.a
+userspace/libs/image/*.o
+userspace/libs/image/imgtest
+userspace/tools/oep-pack/oep-pack
+userspace/tools/oep-pack/oep-unpack
+userspace/tools/oep-pack/oep-list
+userspace/tools/oep-pack/oep-run
+userspace/tools/dev/oasm
+userspace/tools/dev/omake
+userspace/tools/dev/oman

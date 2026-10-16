@@ -42,9 +42,12 @@ static void ed_enter(void) {
     if (g_nlines >= MAXL) return;
     if (g_cx > g_len[g_cy]) g_cx = g_len[g_cy];
     rest = g_len[g_cy] - g_cx;
-    memmove(g_buf[g_nlines], g_buf[g_cy + 1],
+    /* abre espaco na linha g_cy+1: desloca [g_cy+1,g_nlines) uma posicao
+     * para baixo (destino = g_cy+2, nao o fim do buffer). */
+    memmove(g_buf[g_cy + 2], g_buf[g_cy + 1],
             (size_t)(g_nlines - g_cy - 1) * MAXC);
-    memmove(g_len + g_cy + 1, g_len + g_cy,
+    /* lens: desloca [g_cy+1,g_nlines) para [g_cy+2,g_nlines+1). */
+    memmove(g_len + g_cy + 2, g_len + g_cy + 1,
             (size_t)(g_nlines - g_cy - 1) * sizeof(int));
     memcpy(g_buf[g_cy + 1], &g_buf[g_cy][g_cx], (size_t)rest);
     g_len[g_cy + 1] = rest;
@@ -530,6 +533,9 @@ int main(int argc, char **argv) {
             ed_del();
         } else if (k == '\n' || k == '\r' || k == APP_KEY_ENTER) {
             ed_enter();
+        } else if (k == APP_KEY_TAB) {
+            int t;
+            for (t = 0; t < 4; t++) ed_insert(' ');
         } else if ((k >= 32 && k < 127) || k >= 128) {
             ed_insert(k);
         }

@@ -72,11 +72,9 @@ static int fm_list(const char *dir) {
             nl = 0;
             while (nl + 19 < e->d_reclen && nl < 255 && e->d_name[nl])
                 nl++;
-            if (e->d_name[0] == '.' ||
-                (nl == 1 && e->d_name[0] == '.')) {
-                if (!(nl == 2 && e->d_name[1] == '.')) {
-                    /* pula . e mostra .. como [<..>]? mostra sim */
-                }
+            if (nl == 1 && e->d_name[0] == '.') {
+                off += e->d_reclen; /* esconde "."; ".." continua visivel */
+                continue;
             }
             if (nl <= 0 || nl >= 255) { off += e->d_reclen; continue; }
             memcpy(g_e[g_n].name, e->d_name, (size_t)nl);
@@ -139,8 +137,11 @@ static void fm_preview(void) {
     img_free(im);
     printf("\n[Enter volta]\n");
     fflush(stdout);
-    while (getchar() != '\n')
-        ;
+    {
+        int c;
+        while ((c = getchar()) != '\n' && c != EOF)
+            ;
+    }
 }
 
 static int fm_open_ext(void) {
@@ -151,11 +152,21 @@ static int fm_open_ext(void) {
     if (g_n == 0) return -1;
     nm = g_e[g_sel].name;
     if (g_e[g_sel].is_dir) {
+        char tmp[MAXP];
         size_t l = strlen(g_cwd);
-        if (l + strlen(nm) + 2 >= sizeof(g_cwd)) return -1;
-        if (strcmp(g_cwd, "/") != 0) strcat(g_cwd, "/");
-        strcat(g_cwd, nm);
-        return fm_list(g_cwd);
+        if (l + strlen(nm) + 2 >= sizeof(tmp)) return -1;
+        snprintf(tmp, sizeof(tmp), "%s%s%s", g_cwd,
+                 strcmp(g_cwd, "/") != 0 ? "/" : "", nm);
+        if (fm_list(tmp) != 0) {
+            snprintf(g_msg, sizeof(g_msg), "nao abri: %s", tmp);
+            return -1;
+        }
+        strcpy(g_cwd, tmp);
+        return 0;
+    }
+    if (strpbrk(nm, "'\"`$\\!*?")) {
+        snprintf(g_msg, sizeof(g_msg), "nome inseguro p/ abrir: %s", nm);
+        return -1;
     }
     dot = strrchr(nm, '.');
     if (dot && (strcmp(dot, ".ppm") == 0 || strcmp(dot, ".PPM") == 0 ||
@@ -206,20 +217,18 @@ static void tui_draw(void) {
         g_msg[0] = 0;
     }
     if (g_yank[0]) printf("[yank: %s]\n", g_yank);
-    printf("Enter abre  Bksp volta  n/r/d/y/p/v/o/q  (+Enter)\n> ");
+    printf("Enter abre  Bksp/u volta  n/r/d/y/p/v/i/o/q  (+Enter)\n> ");
     fflush(stdout);
 }
 
 static void tui_prompt(const char *label, char *out, size_t n) {
     size_t m = 0;
-    int c;
     printf("%s", label);
     fflush(stdout);
     if (!fgets(out, (int)n, stdin)) { out[0] = 0; return; }
     m = strlen(out);
     while (m > 0 && (out[m - 1] == '\n' || out[m - 1] == '\r'))
         out[--m] = 0;
-    (void)c;
 }
 
 static void tui_run(void) {
@@ -233,8 +242,8 @@ static void tui_run(void) {
         if (!fgets(line, sizeof(line), stdin)) break;
         if (line[0] == 'q') break;
         else if (line[0] == '\n' || line[0] == '\r') fm_open_ext();
-        else if (line[0] == '\177' || line[0] == '\b') {
-            fm_up();
+        else if (line[0] == '\177' || line[0] == '\b' || line[0] == 'u') {
+            fm_up(); /* 'u': Backspace nao chega em stdin canonico */
             fm_list(g_cwd);
         } else if (line[0] == 'j') {
             if (g_sel + 1 < g_n) g_sel++;
@@ -286,7 +295,10 @@ static void tui_run(void) {
                 const char *base = strrchr(g_yank, '/');
                 base = base ? base + 1 : g_yank;
                 snprintf(dst, sizeof(dst), "%s/%s", g_cwd, base);
-                if (line[0] == 'p') {
+                if (strcmp(g_yank, dst) == 0) {
+                    snprintf(g_msg, sizeof(g_msg),
+                             "origem = destino, nada a fazer");
+                } else if (line[0] == 'p') {
                     if (fm_copyfile(g_yank, dst) != 0)
                         snprintf(g_msg, sizeof(g_msg), "copiar: %s",
                                  strerror(errno));
@@ -317,6 +329,10 @@ static void gui_run(void) {
         printf("sem framebuffer neste ambiente (rode no OvsbOS com OVSBOS=1)\n");
         return;
     }
+    if (fb.w / 8 < 20 || fb.h / 8 < 6) {
+        printf("framebuffer pequeno demais\n");
+        return;
+    }
     if (fm_list(g_cwd) != 0) return;
     cols = fb.w / 8;
     rows = fb.h / 8;
@@ -339,38 +355,14 @@ static void gui_run(void) {
         app_text(&fb, 0, 0, g_cwd, 0xFFFFFF00, 0xFF101418);
         for (i = 0; i + 3 < rows && top + (int)i < g_n; i++) {
             char ln[256];
+            unsigned long maxc =
+                cols < sizeof(ln) ? cols : sizeof(ln);
+            if (maxc < 2) break;
             snprintf(ln, sizeof(ln), "%c %s%s",
                      top + (int)i == g_sel ? '>' : ' ',
                      g_e[top + i].name,
                      g_e[top + i].is_dir ? "/" : "");
-            ln[cols - 1] = 0;
+            ln[maxc - 1] = 0;
             app_text(&fb, 0, (i + 1) * 8, ln,
                      top + (int)i == g_sel ? 0xFF000000 : 0xFFD0D0D0,
-                     top + (int)i == g_sel ? 0xFF60A0FF : 0xFF101418);
-        }
-        app_text(&fb, 0, (rows - 1) * 8,
-                 "Enter abre Bksp volta n pasta q sai", 0xFF808080,
-                 0xFF101418);
-        app_fb_flush(&fb);
-    }
-}
-
-int main(int argc, char **argv) {
-    int i;
-    const char *home = getenv("HOME");
-    if (home && home[0]) {
-        strncpy(g_cwd, home, sizeof(g_cwd) - 1);
-        g_cwd[sizeof(g_cwd) - 1] = 0;
-    } else {
-        if (!getcwd(g_cwd, sizeof(g_cwd))) strcpy(g_cwd, "/");
-    }
-    for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--gui") == 0) { gui_run(); return 0; }
-        if (argv[i][0] != '-') {
-            strncpy(g_cwd, argv[i], sizeof(g_cwd) - 1);
-            g_cwd[sizeof(g_cwd) - 1] = 0;
-        }
-    }
-    tui_run();
-    return 0;
-}
+                     top 

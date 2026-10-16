@@ -64,7 +64,7 @@ static int do_pack(const char *elf, const char *assets, const char *out,
                    int odk) {
     FILE *o = fopen(out, "wb");
     char mani[1024];
-    int mlen, nsec = 1, rc = 0;
+    int mlen, nsec = odk ? 0 : 1, rc = 0;
     DIR *d;
     struct dirent *e;
     if (!o) { printf("abrir %s: %s\n", out, strerror(errno)); return 1; }

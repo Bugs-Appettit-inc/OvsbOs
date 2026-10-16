@@ -42,9 +42,12 @@ static void sh_ls(const char *dir) {
             unsigned short rl = *(unsigned short *)(dbuf + off + 16);
             unsigned char tp = *(unsigned char *)(dbuf + off + 18);
             char *nm = dbuf + off + 19;
+            int nl = 0;
             (void)ino;
             if (rl < 19) break;
-            if (nm[0] != '.') printf("%s%s\n", nm, tp == 4 ? "/" : "");
+            while (nl + 19 < rl && nl < 255 && nm[nl]) nl++;
+            if (nl > 0 && nm[0] != '.')
+                printf("%.*s%s\n", nl, nm, tp == 4 ? "/" : "");
             off += rl;
         }
     }
@@ -69,8 +72,11 @@ static int copyfile(const char *s, const char *d) {
 
 /* executa argv[] com redirecionamentos já resolvidos; retorna status. */
 static int run(char **av, const char *in, const char *out, int app) {
-    pid_t p = fork();
+    pid_t p;
     int st;
+    fflush(stdout);
+    fflush(stderr);
+    p = fork();
     if (p < 0) { printf("fork: %s\n", strerror(errno)); return 1; }
     if (p == 0) {
         int fd;
@@ -209,13 +215,35 @@ static int sh_exec(char *line) {
             return 0;
         }
         if (strcmp(av[0], "echo") == 0) {
-            /* echo com redir precisa de fork p/ dup2: cai no run */
             if (!in && !out) {
                 for (i = 1; i < j; i++)
                     printf("%s%s", av[i], i + 1 < j ? " " : "\n");
                 if (j == 1) printf("\n");
                 return 0;
             }
+            if (!in && out) {
+                /* sem fork: nao depende de /bin/echo no guest */
+                int fd = open(out,
+                              O_WRONLY | O_CREAT |
+                                  (app ? O_APPEND : O_TRUNC),
+                              0644);
+                int k2, bad = 0;
+                if (fd < 0) {
+                    printf("echo: %s: %s\n", out, strerror(errno));
+                    return 1;
+                }
+                for (k2 = 1; k2 < j; k2++) {
+                    size_t wl = strlen(av[k2]);
+                    if ((wl && write(fd, av[k2], wl) != (ssize_t)wl) ||
+                        (k2 + 1 < j && write(fd, " ", 1) != 1) ||
+                        (k2 + 1 == j && write(fd, "\n", 1) != 1))
+                        bad = 1;
+                }
+                if (j == 1 && write(fd, "\n", 1) != 1) bad = 1;
+                close(fd);
+                return bad;
+            }
+            /* echo < in : cai no run (externo) */
         }
         if (strcmp(av[0], "clear") == 0 && !in && !out) {
             printf("\033[H\033[2J");
@@ -366,6 +394,7 @@ static void gui_run(void) {
     }
 }
 
+
 int main(int argc, char **argv) {
     char line[MAXL];
     int i;
@@ -381,6 +410,7 @@ int main(int argc, char **argv) {
             break;
         }
         line[strcspn(line, "\n")] = 0;
+        line[strcspn(line, "\r")] = 0;
         if (!line[0]) continue;
         if (g_hn < MAXH) {
             memcpy(g_hist[g_hn], line, MAXL - 1);

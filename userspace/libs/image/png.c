@@ -280,6 +280,10 @@ img_t *img_png_load(void *fp0) {
             have_ihdr = 1;
         } else if (type == 0x49444154) { /* IDAT */
             if (len && idlen + len < idlen) { free(data); break; }
+            if (idlen + len > (1U << 28)) {
+                free(data); /* teto anti-bomba */
+                break;
+            }
             if (idlen + len + 1 > idcap) {
                 unsigned nc = idlen + len + 65536;
                 unsigned char *ni = realloc(idat, nc);
@@ -301,7 +305,7 @@ img_t *img_png_load(void *fp0) {
         unsigned need = (stride + 1) * h;
         unsigned x, y;
         unsigned char *prev, *cur;
-        if (idat[0] != 0x78) goto out; /* zlib: so CMF 0x78xx */
+        if ((idat[0] & 0x0F) != 8) goto out; /* CM=deflate (janela qq) */
         if (idlen < 6) goto out; /* header(2) + adler(4) minimos */
         raw = malloc(need);
         prev = malloc(stride + 1);
@@ -336,6 +340,9 @@ img_t *img_png_load(void *fp0) {
                 } else if (flt != 0) {
                     img_free(im);
                     im = NULL;
+                    free(prev);
+                    free(cur);
+                    prev = cur = NULL;
                     goto out;
                 }
             }

@@ -91,6 +91,9 @@ int img_bmp_save(const img_t *im, void *fp0) {
     FILE *f = fp0;
     unsigned stride, y, x, pad;
     if (!im || !f) return -1;
+    if (im->w <= 0 || im->h <= 0 || im->w > 8192 || im->h > 8192 ||
+        !im->px)
+        return -1;
     stride = ((unsigned)im->w * 3 + 3) & ~3U;
     pad = stride - (unsigned)im->w * 3;
     fputc('B', f); fputc('M', f);
@@ -170,6 +173,9 @@ int img_ppm_save(const img_t *im, void *fp0) {
     FILE *f = fp0;
     int x, y;
     if (!im || !f) return -1;
+    if (im->w <= 0 || im->h <= 0 || im->w > 8192 || im->h > 8192 ||
+        !im->px)
+        return -1;
     fprintf(f, "P6\n%d %d\n255\n", im->w, im->h);
     for (y = 0; y < im->h; y++)
         for (x = 0; x < im->w; x++) {
@@ -235,6 +241,7 @@ img_t *img_scale(const img_t *im, int nw, int nh) {
     img_t *o;
     int x, y;
     if (!im || nw <= 0 || nh <= 0 || nw > 8192 || nh > 8192) return NULL;
+    if (im->w <= 0 || im->h <= 0 || !im->px) return NULL;
     o = img_new(nw, nh);
     if (!o) return NULL;
     for (y = 0; y < nh; y++)
@@ -248,9 +255,11 @@ img_t *img_scale(const img_t *im, int nw, int nh) {
 img_t *img_crop(const img_t *im, int x, int y, int w, int h) {
     img_t *o;
     int j, i;
-    if (!im || w <= 0 || h <= 0) return NULL;
+    if (!im || w <= 0 || h <= 0 || !im->px) return NULL;
+    if (im->w <= 0 || im->h <= 0) return NULL;
     if (x < 0) { w += x; x = 0; }
     if (y < 0) { h += y; y = 0; }
+    if (x >= im->w || y >= im->h) return NULL;
     if (x + w > im->w) w = im->w - x;
     if (y + h > im->h) h = im->h - y;
     if (w <= 0 || h <= 0) return NULL;
@@ -266,6 +275,8 @@ void img_blend(img_t *dst, const img_t *src, int dx, int dy, int alpha) {
     int j, i;
     unsigned a;
     if (!dst || !src) return;
+    if (!dst->px || !src->px) return;
+    if (dst->w <= 0 || dst->h <= 0 || src->w <= 0 || src->h <= 0) return;
     if (alpha < 0) alpha = 0;
     if (alpha > 255) alpha = 255;
     a = (unsigned)alpha;
@@ -289,6 +300,7 @@ void img_ascii(const img_t *im, int maxw) {
     static const char *ramp = " .:-=+*#%@";
     int w, h, x, y;
     if (!im || maxw < 8) return;
+    if (im->w <= 0 || im->h <= 0 || !im->px) return;
     if (maxw > 160) maxw = 160;
     w = im->w > maxw ? maxw : im->w;
     h = im->h * w / im->w / 2;
