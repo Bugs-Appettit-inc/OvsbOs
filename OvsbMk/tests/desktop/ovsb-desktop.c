@@ -1,10 +1,15 @@
 /* ovsb-desktop — FASE 8.1: ambiente desktop (cliente Wayland, protocolo raw).
  * Wallpaper (gradiente) + barra 24px (botão Iniciar + relógio uptime).
+ * FASE 8.2: menu Iniciar (layer overlay) + launcher (/BIN + /APPS, só ELF,
+ * duplo fork + execve). Fecha com clique-fora. Sem Esc: o compositor NÃO
+ * roteia teclado pra layers (só pointer enter/motion/button).
  * Sem libwayland (padrão layer_shell_test.c). Ids DENSOS a partir de 1
  * (wl_map_reserve_new exige; ver Fase 8.0a).
  * Ids: 1 display, 2 registry, 3 sync, 4 comp, 5 shm, 6 output,
- *       7 layer_shell, 8 bg_surf, 9 bg_layer, 10 pool, 11 buf,
- *       12 bar_surf, 13 bar_layer, 14 pool2, 15 buf2. */
+ *       7 layer_shell, 8 seat, 9 pointer,
+ *       10 bg_surf, 11 bg_layer, 12 pool, 13 buf,
+ *       14 bar_surf, 15 bar_layer, 16 pool2, 17 buf2,
+ *       menu (por abertura, nunca reutiliza): 18+4k surf/layer/pool/buf. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +21,11 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/syscall.h>
+extern char **environ;
 #ifndef SYS_memfd_create
 #define SYS_memfd_create 319
 #endif
@@ -225,6 +234,163 @@ static void draw_bar(uint32_t *pix, unsigned daysec){
     dtext(pix, SCR_W, BAR_H, SCR_W-8*8-8, 8, clk, COL_TEXT);
 }
 
+/* ---- FASE 8.2: menu Iniciar (layer overlay) + launcher ----
+ * Overlay pequeno (MENU_W x H) ancorado TOP|LEFT com margem-top BAR_H
+ * (cai em 0,24, logo abaixo da barra). Como o compositor faz blit
+ * opaco (sem alpha), nada de fullscreen-transparente: clique fora no
+ * wallpaper é descartado pelo compositor; clique fora na BARRA chega
+ * aqui (mesmo cliente) e fecha o menu. Teclado nunca chega (layers
+ * não recebem kbd no compositor) — sem Esc.
+ * Ids do menu: 18+4k (surf/layer/pool/buf), nunca reutilizados
+ * (destroy + ids novos a cada abertura evita race com configure). */
+#define BAR_SURF_ID 14
+#define MENU_W 224
+#define MENU_ROW_H 16
+#define MENU_PAD 4
+#define MENU_MAXN 40
+#define MENU_NAME_C 26 /* chars por linha: (224-16)/8 */
+#define COL_MENU_BG 0xFF1E1E1Eu
+#define COL_MENU_BD 0xFF5A5A5Eu
+
+static struct { char path[80]; char name[MENU_NAME_C+1]; } menu_apps[MENU_MAXN];
+static int menu_n=0;
+static int menu_open=0;
+static uint32_t menu_surf=0, menu_layer=0, menu_w=0, menu_h=0;
+static uint32_t *menu_pix=NULL;
+static int menu_sz=0;
+static uint32_t next_id=18; /* primeiro bloco livre */
+static int enter_surf=0;    /* surface sob o pointer (enter opcode 0) */
+
+/* lista ELF de um diretório; retorna adicionados.
+ * FASE 8.2: getdents64 RAW (sem opendir/readdir/malloc da glibc) + filtro
+ * ELF pelo magic. estático, sem alocação (dbuf estático). */
+#ifndef SYS_getdents64
+#define SYS_getdents64 217
+#endif
+struct lxd { int64_t d_ino; int64_t d_off; unsigned short d_reclen; unsigned char d_type; char d_name[1]; };
+/* FASE8.2-INV: modo de scan (0=full com filtro ELF; 1=só nomes).
+ * Modo 1 foi diagnóstico (separar open/read de getdents); resultado:
+ * ambos crasham igual → open/read inocentados. Manter 0 (produto). */
+#define SCAN_NAMES_ONLY 0
+static int scan_dir(const char *dir){
+    static char dbuf[8192];
+    int dfd=open(dir,O_RDONLY);
+    if(dfd<0) return 0;
+    int added=0;
+    for(;;){
+        long n=syscall(SYS_getdents64,dfd,dbuf,sizeof(dbuf));
+        if(n<=0) break;
+        long off=0;
+        while(off<n && menu_n<MENU_MAXN){
+            struct lxd *e=(struct lxd*)(dbuf+off);
+            if(e->d_reclen<19) break;
+            const char *nm=e->d_name;
+            /* nome terminado dentro do recorde? (defesa contra kernel) */
+            int nl=0; while(nl+19<(int)e->d_reclen && nl<255 && nm[nl]) nl++;
+            if(nm[0]!='.' && nl>0 && nl<80){
+                char full[80];
+                int dl=0; while(dir[dl] && dl<70){ full[dl]=dir[dl]; dl++; }
+                full[dl]='/'; dl++;
+                int ci=0; while(ci<nl && dl<79){ full[dl]=nm[ci]; dl++; ci++; }
+                full[dl]=0;
+#if SCAN_NAMES_ONLY
+                /* modo diagnóstico: lista tudo sem open/read (sem filtro ELF) */
+                int k=0; while(full[k] && k<79){ menu_apps[menu_n].path[k]=full[k]; k++; }
+                menu_apps[menu_n].path[k]=0;
+                int i=0; while(nm[i] && i<MENU_NAME_C){ menu_apps[menu_n].name[i]=nm[i]; i++; }
+                menu_apps[menu_n].name[i]=0;
+                menu_n++; added++;
+#else
+                int f=open(full,O_RDONLY);
+                if(f>=0){
+                    uint8_t mg[4]; ssize_t r=read(f,mg,4); close(f);
+                    if(r==4&&mg[0]==0x7f&&mg[1]=='E'&&mg[2]=='L'&&mg[3]=='F'){
+                        int k=0; while(full[k] && k<79){ menu_apps[menu_n].path[k]=full[k]; k++; }
+                        menu_apps[menu_n].path[k]=0;
+                        int i=0; while(nm[i] && i<MENU_NAME_C){ menu_apps[menu_n].name[i]=nm[i]; i++; }
+                        menu_apps[menu_n].name[i]=0;
+                        menu_n++; added++;
+                    }
+                }
+#endif
+            }
+            off+=e->d_reclen;
+        }
+        if(menu_n>=MENU_MAXN) break;
+    }
+    close(dfd);
+    return added;
+}
+/* ordena por nome (bolha; n<=40) p/ menu determinístico */
+static void sort_apps(void){
+    for(int i=0;i<menu_n;i++) for(int j=i+1;j<menu_n;j++){
+        if(strcmp(menu_apps[i].name,menu_apps[j].name)>0){
+            char tp[80], tn[MENU_NAME_C+1];
+            strcpy(tp,menu_apps[i].path); strcpy(tn,menu_apps[i].name);
+            strcpy(menu_apps[i].path,menu_apps[j].path); strcpy(menu_apps[i].name,menu_apps[j].name);
+            strcpy(menu_apps[j].path,tp); strcpy(menu_apps[j].name,tn);
+        }
+    }
+}
+static void draw_menu(uint32_t *pix){
+    dfill(pix, menu_w, menu_h, 0, 0, menu_w, menu_h, COL_MENU_BD);
+    dfill(pix, menu_w, menu_h, 1, 1, menu_w-1, menu_h-1, COL_MENU_BG);
+    if(menu_n==0){
+        dtext(pix, menu_w, menu_h, 8, MENU_PAD+4, "(vazio)", COL_TEXT);
+        return;
+    }
+    for(int i=0;i<menu_n;i++)
+        dtext(pix, menu_w, menu_h, 8, MENU_PAD+i*MENU_ROW_H+4, menu_apps[i].name, COL_TEXT);
+}
+/* duplo fork + execve (neto herda; filho sai; pai colhe o filho) */
+static void do_launch(const char *path){
+    char l[96]; snprintf(l,sizeof(l),"[DESKTOP] launch %s\n",path); dlog(l);
+    pid_t mid=fork();
+    if(mid<0){ dlog("[DESKTOP] launch fork FAIL\n"); return; }
+    if(mid==0){
+        if(fork()==0){
+            char *const argv[]={ (char*)path, NULL };
+            execve(path, argv, environ);
+            _exit(127);
+        }
+        _exit(0);
+    }
+    int st=0; waitpid(mid,&st,0);
+}
+static void menu_close(int fd){
+    if(!menu_open) return;
+    send_msg(fd,menu_layer,7,NULL,0); /* layer destroy */
+    send_msg(fd,menu_surf,0,NULL,0);  /* surf destroy */
+    if(menu_pix && menu_pix!=(void*)-1){ munmap(menu_pix,menu_sz); menu_pix=NULL; }
+    menu_open=0; menu_surf=0; menu_layer=0;
+    dlog("[DESKTOP] menu fechado\n");
+}
+static void menu_try_open(int fd){
+    menu_n=0;
+    scan_dir("/BIN");
+    scan_dir("/APPS");
+    sort_apps();
+    int rows=menu_n>0?menu_n:1;
+    menu_w=MENU_W; menu_h=MENU_PAD*2+rows*MENU_ROW_H;
+    if(menu_h>SCR_H-BAR_H) menu_h=SCR_H-BAR_H;
+    menu_surf=next_id; menu_layer=next_id+1;
+    uint32_t pool=next_id+2, buf=next_id+3;
+    next_id+=4;
+    layer_surf(fd,7,4,6, menu_surf,menu_layer,3,"menu");
+    { uint8_t b[8]; wr32(b,menu_w); wr32(b+4,menu_h); send_msg(fd,menu_layer,0,b,8); } /* set_size */
+    { uint8_t b[4]; wr32(b,5); send_msg(fd,menu_layer,1,b,4); }                        /* anchor TOP|LEFT */
+    { uint8_t b[4]; wr32(b,0); send_msg(fd,menu_layer,2,b,4); }                        /* exclusive 0 */
+    { uint8_t b[16]; wr32(b,BAR_H); wr32(b+4,0); wr32(b+8,0); wr32(b+12,0); send_msg(fd,menu_layer,3,b,16); } /* margin top=BAR_H */
+    menu_pix=make_pool(fd,5,pool,menu_w,menu_h,&menu_sz);
+    if(!menu_pix){ dlog("[DESKTOP] menu pool FAIL\n"); send_msg(fd,menu_layer,7,NULL,0); send_msg(fd,menu_surf,0,NULL,0); menu_surf=menu_layer=0; return; }
+    draw_menu(menu_pix);
+    { uint8_t b[24]; wr32(b,buf); wr32(b+4,0); wr32(b+8,menu_w); wr32(b+12,menu_h); wr32(b+16,menu_w*4); wr32(b+20,1); send_msg(fd,pool,0,b,24); }
+    { uint8_t b[12]; wr32(b,buf); wr32(b+4,0); wr32(b+8,0); send_msg(fd,menu_surf,1,b,12); }
+    send_msg(fd,menu_surf,6,NULL,0);
+    menu_open=1;
+    { char l[64]; snprintf(l,sizeof(l),"[DESKTOP] menu overlay criado %ux%u apps=%d\n",menu_w,menu_h,menu_n); dlog(l); }
+}
+
 int main(void){
     setvbuf(stdout, NULL, _IONBF, 0);
     dlog("[DESKTOP] start\n");
@@ -332,18 +498,38 @@ int main(void){
                 if(size<8||off+(int)size>blen) break;
                 uint8_t *pay=buf+off+8; uint32_t plen=size-8;
                 if(sender==1 && op==0){ dlog("[DESKTOP] display error\n"); return 1; }
-                else if((sender==11||sender==15) && op==0 && plen>=12){
+                else if((sender==11||sender==15||(menu_open&&sender==menu_layer)) && op==0 && plen>=12){
                     uint32_t serial=rd32(pay);
                     uint8_t b[4]; wr32(b,serial); send_msg(fd,sender,6,b,4);
-                    send_msg(fd,sender==11?10:14,6,NULL,0);
+                    send_msg(fd,sender==11?10:(sender==15?14:menu_surf),6,NULL,0);
                     cfg++;
                 } else if((sender==11||sender==15) && op==1){ dlog("[DESKTOP] layer closed\n"); return 0;
+                } else if(sender==9 && op==0 && plen>=16){
+                    enter_surf=(int)rd32(pay+4);
+                    ptr_sx=(int)rd32(pay+8)/256; ptr_sy=(int)rd32(pay+12)/256;
+                } else if(sender==9 && op==1 && plen>=8){
+                    enter_surf=0;
                 } else if(sender==9 && op==2 && plen>=12){
                     ptr_sx=(int)rd32(pay+4)/256; ptr_sy=(int)rd32(pay+8)/256;
                 } else if(sender==9 && op==3 && plen>=16){
                     uint32_t btn=rd32(pay+8), st=rd32(pay+12);
-                    if(btn==272 && st==1 && ptr_sx>=4 && ptr_sx<94 && ptr_sy>=3 && ptr_sy<21)
+                    /* FASE8.2-fix: só PRESS age. O release do próprio clique
+                     * de abertura chegava com enter na barra (!=menu) e era
+                     * lido como "clique-fora" — fechava o menu na hora. */
+                    if(btn!=272 || st!=1) {} else if(menu_open){
+                        if(enter_surf==(int)menu_surf){
+                            int row=(ptr_sy-MENU_PAD)/MENU_ROW_H;
+                            if(row>=0 && row<menu_n && ptr_sx>=0 && (unsigned)ptr_sx<menu_w)
+                                do_launch(menu_apps[row].path);
+                            /* dentro do menu mas fora das linhas: ignora */
+                        } else {
+                            menu_close(fd); /* clique-fora chegou pela barra */
+                        }
+                    } else if(enter_surf==BAR_SURF_ID &&
+                              ptr_sx>=4 && ptr_sx<94 && ptr_sy>=3 && ptr_sy<21){
                         dlog("[DESKTOP] INICIAR click\n");
+                        menu_try_open(fd);
+                    }
                 }
                 off+=size;
             }
