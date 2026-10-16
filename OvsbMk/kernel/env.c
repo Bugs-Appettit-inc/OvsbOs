@@ -88,8 +88,11 @@ int alias_unset(const char *name) {
     for (int i = 0; i < alias_count; i++)
         if (strcmp(alias_name[i], name) == 0) {
             for (int j = i; j < alias_count - 1; j++) {
-                strcpy(alias_name[j], alias_name[j+1]);
-                strcpy(alias_val[j], alias_val[j+1]);
+                /* linhas de tamanho fixo igual: memcpy exato, sem bound */
+                memcpy(alias_name[j], alias_name[j+1],
+                       sizeof(alias_name[j]));
+                memcpy(alias_val[j], alias_val[j+1],
+                       sizeof(alias_val[j]));
             }
             alias_count--;
             return 1;
