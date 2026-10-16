@@ -160,8 +160,9 @@ void idt_handler(uint64_t *regs) {
                 for (int i = 0; i < 16; i++) {
                     serial_puthex(code[i]);
                     if (i != 15) serial_putc(' ');
-                }
-                serial_puts("\r\n");
+            }
+            serial_puts("\r\n");
+        
             }
             uint32_t fslo, fshi;
             __asm__ volatile("rdmsr" : "=a"(fslo), "=d"(fshi) : "c"(0xC0000100));

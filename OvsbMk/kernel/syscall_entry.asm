@@ -20,9 +20,12 @@ global current_rsp0
 current_rsp0: dq 0          ; kernel stack top do processo atual
                              ; setado pelo context_switch
 
+extern current_pid
+
 section .text
 global syscall_entry
 extern syscall_handler_zig
+
 
 syscall_entry:
     ; rcx = return RIP do userspace (syscall clobbered)
