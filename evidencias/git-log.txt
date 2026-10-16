@@ -1,2 +1,4 @@
+365534a noite: ignora binarios host dos apps (rebuild via make)
+12712c8 noite: apps base + auditoria kernel + fix TLB mprotect + hipotese +0x68
 359e443 chore: snapshot pré-auditoria noturna
 2899c6b feat(ovsbos): desktop Wayland + WM + titlebar + menu
