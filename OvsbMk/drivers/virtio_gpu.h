@@ -132,12 +132,35 @@ typedef struct __attribute__((packed)) {
     uint32_t padding;
 } virtio_gpu_resource_flush_t;
 
+/* --- Cursor de hardware (cursorq) --- */
+typedef struct __attribute__((packed)) {
+    uint32_t scanout_id;
+    uint32_t x, y;
+    uint32_t padding;
+} virtio_gpu_cursor_pos_t;
+
+typedef struct __attribute__((packed)) {
+    virtio_gpu_ctrl_hdr_t hdr;
+    virtio_gpu_cursor_pos_t pos;
+    uint32_t resource_id;
+    uint32_t hot_x, hot_y;
+    uint32_t padding;
+} virtio_gpu_update_cursor_t;
+
+typedef struct __attribute__((packed)) {
+    virtio_gpu_ctrl_hdr_t hdr;
+    virtio_gpu_cursor_pos_t pos;
+} virtio_gpu_move_cursor_t;
+
+#define VIRTIO_GPU_CURSOR_SIZE 64
+
 /* --- Backing pages --- */
 #define VIRTIO_GPU_BACKING_SIZE 0x400000  /* 4 MB backing */
 
 extern int g_virtio_active;
 int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out);
 int virtio_gpu_flush(void);
+int virtio_gpu_cursor_move(int x, int y);
 
 #endif
 

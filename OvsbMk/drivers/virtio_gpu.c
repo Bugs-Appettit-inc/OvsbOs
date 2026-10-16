@@ -58,9 +58,17 @@ typedef struct {
     uint16_t    last_used;
     uint16_t    notify_off;
     uint64_t    desc_paddr;
+    /* free-list de descritores (sem ela, 256 cmds esgotavam a fila e o
+     * flush morria p/ sempre = tela congelada com guest vivo). */
+    int        *free_stack;
+    int         free_top;
 } virtqueue_t;
 
 static virtqueue_t g_ctrlq;
+static virtqueue_t g_cursorq;
+static int g_cursor_on = 0;
+static uint32_t g_cursor_rid = 0;
+static int g_cursor_lx = -1, g_cursor_ly = -1;
 static uint32_t g_rid = 1;
 static uint32_t g_fb_w = 0, g_fb_h = 0;
 
@@ -124,6 +132,9 @@ static int vq_init(virtqueue_t *vq, uint32_t sel, uint16_t qsize) {
     vq->size   = qsize;
     vq->next_desc = 0;
     vq->last_used = 0;
+    vq->free_stack = kmalloc((size_t)qsize * sizeof(int));
+    vq->free_top = 0;
+    if (!vq->free_stack) return -1;
     vq->desc_paddr = (uint64_t)(uintptr_t)mem;
     vq->notify_off = 0;
 
@@ -150,16 +161,24 @@ static int vq_init(virtqueue_t *vq, uint32_t sel, uint16_t qsize) {
 
 /* ~ essa demorou pra debugar, respeita ~ */
 static int vq_alloc_desc(virtqueue_t *vq) {
+    if (vq->free_stack && vq->free_top > 0)
+        return vq->free_stack[--vq->free_top];
     if (vq->next_desc >= vq->size) return -1;
     return (int)vq->next_desc++;
 }
 
+static void vq_free_desc(virtqueue_t *vq, int id) {
+    if (!vq->free_stack || id < 0 || id >= vq->size) return;
+    if (vq->free_top >= vq->size) return;
+    vq->free_stack[vq->free_top++] = id;
+}
+
 /* ~ essa funcao aqui e a mais importante, presta atencao baka! */
 static void vq_post(virtqueue_t *vq, int head) {
-    uint16_t i = vq->avail->idx;
+    uint16_t i = (uint16_t)(vq->avail->idx % vq->size);
     vq->avail->ring[i] = (uint16_t)head;
     __asm__ volatile("" : : : "memory");
-    vq->avail->idx = i + 1;
+    vq->avail->idx++;
     __asm__ volatile("" : : : "memory");
     uint32_t doorbell = g_notify_mult * vq->notify_off;
     *(volatile uint16_t*)(g_notify + doorbell) = 0;
@@ -170,7 +189,7 @@ static int vq_wait(virtqueue_t *vq) {
     for (int t = 0; t < 50000000; t++) {
         __asm__ volatile("pause");
         if (vq->last_used != vq->used->idx) {
-            uint16_t i = vq->last_used & (vq->size - 1);
+            uint16_t i = (uint16_t)(vq->last_used % vq->size);
             vq->last_used++;
             return (int)vq->used->ring[i].id;
         }
@@ -201,10 +220,174 @@ static int vg_cmd(void *cmd, uint32_t clen, void *resp, uint32_t rlen) {
     }
 
     vq_post(&g_ctrlq, d);
-    return (vq_wait(&g_ctrlq) >= 0) ? 0 : -1;
+    int wid = vq_wait(&g_ctrlq);
+    if (wid < 0) return -1;
+    /* recicla: sem isso a fila esgotava em ~128 comandos e o flush
+     * parava para sempre (tela congelada). Em timeout não recicla
+     * (device pode completar depois). */
+    vq_free_desc(&g_ctrlq, d);
+    if (rd >= 0) vq_free_desc(&g_ctrlq, rd);
+    return 0;
+}
+
+/* mesmo que vg_cmd, mas confere o tipo da resposta (OK_NODATA ou
+ * OK_DISPLAY_INFO). Antes, erro do host passava batido (ex.: formato
+ * inválido → tela preta sem nenhum log). */
+static int vg_cmd_checked(void *cmd, uint32_t clen, void *resp,
+                          uint32_t rlen, uint32_t expect) {
+    uint32_t got;
+    if (!resp || rlen < 4) return -1;
+    *(uint32_t *)resp = 0xDEADBEEF;
+    if (vg_cmd(cmd, clen, resp, rlen) < 0) return -1;
+    got = *(uint32_t *)resp;
+    if (got != expect && got != 0x1100) {
+        serial_puts("[VG] RESP ERR type=");
+        serial_puthex(got);
+        serial_puts(" want=");
+        serial_puthex(expect);
+        serial_puts("\r\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* fire-and-forget numa fila (cursorq): recolhe conclusões antigas
+ * (recicla) antes de postar; sem wait (cursor anda a 100Hz). */
+static int vq_fire(virtqueue_t *vq, void *cmd, uint32_t clen) {
+    while (vq->last_used != vq->used->idx) {
+        uint16_t i = (uint16_t)(vq->last_used % vq->size);
+        int id = (int)vq->used->ring[i].id;
+        vq->last_used++;
+        vq_free_desc(vq, id);
+    }
+    int d = vq_alloc_desc(vq);
+    if (d < 0) return -1;
+    vq->desc[d].addr = (uint64_t)(uintptr_t)cmd;
+    vq->desc[d].len  = clen;
+    vq->desc[d].flags = 0;
+    vq->desc[d].next = 0;
+    vq_post(vq, d);
+    return 0;
+}
+
+/* --- Cursor de hardware --- */
+static uint32_t g_cursor_px[VIRTIO_GPU_CURSOR_SIZE * VIRTIO_GPU_CURSOR_SIZE];
+static virtio_gpu_update_cursor_t g_cur_upd;
+static virtio_gpu_move_cursor_t g_cur_mov;
+
+static void cursor_draw_arrow(void) {
+    /* seta branca 15x11 com sombra, resto transparente */
+    static const char *bits[15] = {
+        "X..........", "XX.........", "XXX........", "XXXX.......",
+        "XXXXX......", "XXXXXX.....", "XXXXXXX....", "XXXXXXXX...",
+        "XXXXXXXXX..", "XXXXXXXXXX.", "XXXXXX.....", "XXXX.XX....",
+        "XXX...XX...", "XX.....XX..", "X.......XX.",
+    };
+    for (int i = 0; i < VIRTIO_GPU_CURSOR_SIZE * VIRTIO_GPU_CURSOR_SIZE; i++)
+        g_cursor_px[i] = 0x00000000;
+    for (int r = 0; r < 15; r++)
+        for (int c = 0; c < 11; c++) {
+            if (bits[r][c] != 'X') continue;
+            int sx = c + 1, sy = r + 1;
+            if (sx < 64 && sy < 64)
+                g_cursor_px[sy * 64 + sx] = 0xFF000000;
+            g_cursor_px[r * 64 + c] = 0xFFFFFFFF;
+        }
+}
+
+static int cursor_setup(void) {
+    /* resource 2: 64x64 ARGB + backing + transfer */
+    g_cursor_rid = 2;
+    cursor_draw_arrow();
+    {
+        virtio_gpu_resource_create_2d_t *c = kmalloc(sizeof(*c));
+        virtio_gpu_ctrl_hdr_t *r = kmalloc(sizeof(*r));
+        if (!c || !r) { if (c) kfree(c); if (r) kfree(r); return -1; }
+        c->hdr.type = 0x0101;
+        c->hdr.flags = 0;
+        c->resource_id = g_cursor_rid;
+        c->format = 1; /* B8G8R8A8_UNORM */
+        c->width = VIRTIO_GPU_CURSOR_SIZE;
+        c->height = VIRTIO_GPU_CURSOR_SIZE;
+        if (vg_cmd_checked(c, sizeof(*c), r, sizeof(*r), 0x1100) < 0) {
+            kfree(c); kfree(r); return -1;
+        }
+        kfree(c); kfree(r);
+    }
+    {
+        size_t asz = sizeof(virtio_gpu_attach_backing_t) +
+                     sizeof(virtio_gpu_mem_entry_t);
+        virtio_gpu_attach_backing_t *a = kmalloc(asz);
+        virtio_gpu_mem_entry_t *e =
+            (virtio_gpu_mem_entry_t *)((uint8_t *)a + sizeof(*a));
+        virtio_gpu_ctrl_hdr_t *r = kmalloc(sizeof(*r));
+        if (!a || !r) {
+            if (a) kfree(a); if (r) kfree(r); return -1;
+        }
+        a->hdr.type = 0x0106;
+        a->hdr.flags = 0;
+        a->resource_id = g_cursor_rid;
+        a->nr_entries = 1;
+        e->addr = (uint64_t)(uintptr_t)g_cursor_px;
+        e->length = sizeof(g_cursor_px);
+        e->padding = 0;
+        if (vg_cmd_checked(a, asz, r, sizeof(*r), 0x1100) < 0) {
+            kfree(a); kfree(r); return -1;
+        }
+        kfree(a); kfree(r);
+    }
+    {
+        /* TRANSFER_TO_HOST_2D da imagem do cursor */
+        static virtio_gpu_transfer_to_host_2d_t t;
+        static virtio_gpu_ctrl_hdr_t tr;
+        t.hdr.type = 0x0105;
+        t.hdr.flags = 0;
+        t.r.x = 0; t.r.y = 0;
+        t.r.w = VIRTIO_GPU_CURSOR_SIZE;
+        t.r.h = VIRTIO_GPU_CURSOR_SIZE;
+        t.offset = 0;
+        t.resource_id = g_cursor_rid;
+        t.padding = 0;
+        if (vg_cmd_checked(&t, sizeof(t), &tr, sizeof(tr), 0x1100) < 0) return -1;
+    }
+    /* UPDATE_CURSOR inicial (mostra na posição atual do mouse) */
+    {
+        extern int mouse_x, mouse_y;
+        g_cur_upd.hdr.type = 0x0107;
+        g_cur_upd.hdr.flags = 0;
+        g_cur_upd.pos.scanout_id = 0;
+        g_cur_upd.pos.x = (uint32_t)mouse_x;
+        g_cur_upd.pos.y = (uint32_t)mouse_y;
+        g_cur_upd.pos.padding = 0;
+        g_cur_upd.resource_id = g_cursor_rid;
+        g_cur_upd.hot_x = 0;
+        g_cur_upd.hot_y = 0;
+        g_cur_upd.padding = 0;
+        vq_fire(&g_cursorq, &g_cur_upd, sizeof(g_cur_upd));
+    }
+    g_cursor_on = 1;
+    g_cursor_lx = -1;
+    serial_puts("[VG] cursor HW ok\r\n");
+    return 0;
 }
 
 /* --- Public API --- */
+
+int virtio_gpu_cursor_move(int x, int y) {
+    if (!g_cursor_on) return -1;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x == g_cursor_lx && y == g_cursor_ly) return 0;
+    g_cursor_lx = x;
+    g_cursor_ly = y;
+    g_cur_mov.hdr.type = 0x0108;
+    g_cur_mov.hdr.flags = 0;
+    g_cur_mov.pos.scanout_id = 0;
+    g_cur_mov.pos.x = (uint32_t)x;
+    g_cur_mov.pos.y = (uint32_t)y;
+    g_cur_mov.pos.padding = 0;
+    return vq_fire(&g_cursorq, &g_cur_mov, sizeof(g_cur_mov));
+}
 
 /* ~ essa funcao aqui e a mais importante, presta atencao baka! */
 int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
@@ -321,6 +504,16 @@ int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
         return -1;
     }
 
+    /* cursorq (1): opcional — sem ela, só não há cursor HW */
+    if (num_q >= 2) {
+        if (vq_init(&g_cursorq, 1, 256) < 0)
+            serial_puts("[VG] cursorq FAIL (sem HW cursor)\r\n");
+        else
+            serial_puts("[VG] cursorq ok\r\n");
+    } else {
+        serial_puts("[VG] 1 fila só (sem HW cursor)\r\n");
+    }
+
     vc_w8(0x14, 0x0F);
     serial_puts("[VG] DRIVER_OK\r\n");
 
@@ -333,7 +526,7 @@ int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
     req->context_id = 0;
     req->padding  = 0;
 
-    if (vg_cmd(req, sizeof(*req), resp, sizeof(*resp)) < 0) {
+    if (vg_cmd_checked(req, sizeof(*req), resp, sizeof(*resp), 0x1101) < 0) {
         serial_puts("[VG] get_disp FAIL\r\n");
         kfree(req); kfree(resp);
         return -1;
@@ -369,10 +562,12 @@ int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
         c->hdr.type = 0x0101;
         c->hdr.flags = 0;
         c->resource_id = g_rid;
-        c->format = 256;
+        c->format = 1; /* B8G8R8A8_UNORM (era 256 = formato inválido:
+                        * o host recusava silencioso e a tela ficava
+                        * preta; respostas agora checadas abaixo) */
         c->width  = w;
         c->height = h;
-        if (vg_cmd(c, sizeof(*c), r, sizeof(*r)) < 0) {
+        if (vg_cmd_checked(c, sizeof(*c), r, sizeof(*r), 0x1100) < 0) {
             serial_puts("[VG] create2d FAIL\r\n");
             kfree(c); kfree(r); return -1;
         }
@@ -393,7 +588,7 @@ int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
         e->padding = 0;
 
         virtio_gpu_ctrl_hdr_t *r = kmalloc(sizeof(*r));
-        if (vg_cmd(a, asz, r, sizeof(*r)) < 0) {
+        if (vg_cmd_checked(a, asz, r, sizeof(*r), 0x1100) < 0) {
             serial_puts("[VG] attach FAIL\r\n");
             kfree(a); kfree(r); return -1;
         }
@@ -409,7 +604,7 @@ int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
         s->r.x = 0; s->r.y = 0; s->r.w = w; s->r.h = h;
         s->scanout_id = 0;
         s->resource_id = g_rid;
-        if (vg_cmd(s, sizeof(*s), r, sizeof(*r)) < 0) {
+        if (vg_cmd_checked(s, sizeof(*s), r, sizeof(*r), 0x1100) < 0) {
             serial_puts("[VG] scanout FAIL\r\n");
             kfree(s); kfree(r); return -1;
         }
@@ -423,6 +618,10 @@ int virtio_gpu_init(framebuffer_t *fb, uint64_t *fb_va_out) {
     fb->bpp   = 32;
     *fb_va_out = (uint64_t)(uintptr_t)backing;
     g_virtio_active = 1;
+
+    /* cursor HW: opcional, falha silenciosa (software continua) */
+    if (g_cursorq.size && cursor_setup() < 0)
+        serial_puts("[VG] cursor HW skip\r\n");
 
     serial_puts("[VG] init OK!\r\n");
     return 0;
@@ -439,8 +638,8 @@ int virtio_gpu_flush(void) {
     g_flush_xfer.offset = 0;
     g_flush_xfer.resource_id = g_rid;
     g_flush_xfer.padding = 0;
-    if (vg_cmd(&g_flush_xfer, sizeof(g_flush_xfer),
-               &g_flush_resp, sizeof(g_flush_resp)) < 0) {
+    if (vg_cmd_checked(&g_flush_xfer, sizeof(g_flush_xfer),
+                      &g_flush_resp, sizeof(g_flush_resp), 0x1100) < 0) {
         return -1;
     }
 
@@ -450,8 +649,8 @@ int virtio_gpu_flush(void) {
     g_flush_res.r.w = g_fb_w; g_flush_res.r.h = g_fb_h;
     g_flush_res.resource_id = g_rid;
     g_flush_res.padding = 0;
-    if (vg_cmd(&g_flush_res, sizeof(g_flush_res),
-               &g_flush_resp, sizeof(g_flush_resp)) < 0) {
+    if (vg_cmd_checked(&g_flush_res, sizeof(g_flush_res),
+                      &g_flush_resp, sizeof(g_flush_resp), 0x1100) < 0) {
         return -1;
     }
 

@@ -19,6 +19,9 @@
 #include "serial.h"
 #include "signal.h"
 
+extern int virtio_gpu_flush(void);
+extern int g_virtio_active;
+
 static inline void outb(uint16_t port, uint8_t val) { __asm__ volatile ("outb %0, %1" :: "a"(val), "Nd"(port)); }
 
 volatile uint64_t timer_ticks = 0;
@@ -30,13 +33,14 @@ void timer_tick_handler(uint64_t *registers) {
     timer_ticks++;
     outb(0x20, 0x20);
     signal_dispatch_irq(registers);
+    /* Auto-flush do scanout virtio a 20fps: ninguém mais chama
+     * disp_flush (compositor proibido de mexer, desktop congelado) e
+     * sem flush o host mostra tela preta/stale. Comandos são rápidos
+     * (µs) e IF=0 aqui (sem reentrância com flush de syscall). */
+    if (g_virtio_active && (timer_ticks % 5) == 0)
+        virtio_gpu_flush();
     /* Preempção real DESLIGADA (tentativa documentada em
-     * evidencias/NOTA-PREEMPT aspirina): schedule() aqui quebra o boot
-     * (#GP no iretq do switch durante setup de processos) e congela em
-     * bring. Hipóteses: janela bring-up + RBX fora do frame em algum
-     * caminho. Redesign precisa de disciplina de preempção explícita
-     * (regiões não-preemptíveis + READY-por-último em TODOS os paths).
-     * Por enquanto: cooperativo (flag p/ kernel_main), como antes. */
+     * evidencias/NOTA-PREEMPCAO.md): schedule() aqui quebra o boot. */
     need_sched = 1;
 }
 

@@ -2,6 +2,8 @@
 // moe moe kyun <3
 // Mouse PS/2 driver for TipOS (GPL v2)
 
+extern fn virtio_gpu_cursor_move(x: i32, y: i32) i32;
+
 // ~~ Estado do mouse ~~
 // mouse_cycle: fase de montagem do pacote (0, 1, 2)
 // mouse_packet: 3 bytes do pacote PS/2 (flags, dx, dy)
@@ -155,6 +157,8 @@ export fn mouse_process_byte(d: u8) void {
             if (mouse_x > 1023) mouse_x = 1023;
             if (mouse_y > 767) mouse_y = 767;
             mouse_buttons = @as(i32, flags) & 7;
+            // Cursor de hardware (virtio-gpu): sem efeito se desligado.
+            _ = virtio_gpu_cursor_move(mouse_x, mouse_y);
         },
         else => mouse_cycle = 0,
     }
