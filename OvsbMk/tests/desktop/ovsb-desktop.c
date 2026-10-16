@@ -490,9 +490,47 @@ static void menu_try_open(int fd){
     { char l[64]; snprintf(l,sizeof(l),"[DESKTOP] menu overlay criado %ux%u apps=%d\n",menu_w,menu_h,menu_n); dlog(l); }
 }
 
+/* Uma sessão completa: conecta, cria wallpaper+barra, roda o loop.
+ * Retorna quando o compositor morre/erro (o main relança, até 3x).
+ * Estado por-sessão é resetado (ids do compositor novo começam do zero);
+ * o cache do menu SOBREVIVE (sem rescan após restart). */
+static int run_session(int sess); /* fwd (main chama antes) */
 int main(void){
     setvbuf(stdout, NULL, _IONBF, 0);
+    signal(SIGPIPE, SIG_IGN); /* socket morto: erro, não morte */
     dlog("[DESKTOP] start\n");
+    for(int sess=0; sess<4; sess++){
+        int rc=run_session(sess);
+        if(sess>=3){ dlog("[DESKTOP] sem mais restarts\n"); return rc; }
+        dlog("[DESKTOP] sessao caiu; relancando compositor...\n");
+        unlink("/tmp/wayland-0");
+        {
+            pid_t c=fork();
+            if(c==0){
+                if(fork()==0){
+                    char *const av[]={"/BIN/WAYLAND_COMPOSITOR_LIB",NULL};
+                    execve(av[0],av,environ);
+                    _exit(127);
+                }
+                _exit(0);
+            } else if(c>0){
+                int st=0; waitpid(c,&st,0);
+            }
+        }
+        usleep(2000000); /* compositor precisa bindar o socket */
+    }
+    return 0;
+}
+/* Uma sessão completa: conecta, cria wallpaper+barra, roda o loop.
+ * Retorna quando o compositor morre/erro (o main relança, até 3x).
+ * Estado por-sessão é resetado (ids do compositor novo começam do zero);
+ * o cache do menu SOBREVIVE (sem rescan após restart). */
+static int run_session(int sess){
+    (void)sess;
+    next_id=18;
+    menu_open=0; menu_surf=0; menu_layer=0; enter_surf=0;
+    if(menu_pix && menu_pix!=(void*)-1){ munmap(menu_pix,menu_sz); }
+    menu_pix=NULL; menu_sz=0;
     const char *xdg=getenv("XDG_RUNTIME_DIR");
     char path[128];
     if(xdg&&xdg[0]) snprintf(path,sizeof(path),"%s/wayland-0",xdg);

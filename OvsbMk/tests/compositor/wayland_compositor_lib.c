@@ -148,6 +148,34 @@ static void draw_cursor(void){
         }
     }
 }
+/* cursor fast-path: salva/restaura só a caixa 12x16 sob o cursor em
+ * vez de redraw_all() (fill 1280x800 + reblit tudo) a cada motion.
+ * Qualquer blit ou repaint total invalida o salvamento. */
+#define CUR_W 12
+#define CUR_H 16
+static uint32_t cursor_under[CUR_W*CUR_H];
+static int cursor_saved=0, cursor_sx=0, cursor_sy=0, cursor_stale=0;
+static void cursor_restore(void){
+    if(!cursor_saved || !fb_addr) return;
+    uint32_t *dst=(uint32_t*)fb_addr;
+    /* restaura NAS coords salvas (o cursor já andou; é para isso que
+     * guardamos sx/sy — comparar com a posição nova seria sempre
+     * diferente e nunca restauraria). */
+    for(int r=0;r<CUR_H && cursor_sy+r<fb_h;r++)
+        for(int c=0;c<CUR_W && cursor_sx+c<fb_w;c++)
+            dst[(cursor_sy+r)*fb_pitch+cursor_sx+c]=cursor_under[r*CUR_W+c];
+    cursor_saved=0;
+}
+static void cursor_save_draw(void){
+    if(!fb_addr) return;
+    uint32_t *dst=(uint32_t*)fb_addr;
+    int x0=cursor_x<0?0:cursor_x, y0=cursor_y<0?0:cursor_y;
+    for(int r=0;r<CUR_H && y0+r<fb_h;r++)
+        for(int c=0;c<CUR_W && x0+c<fb_w;c++)
+            cursor_under[r*CUR_W+c]=dst[(y0+r)*fb_pitch+x0+c];
+    cursor_sx=x0; cursor_sy=y0; cursor_saved=1; cursor_stale=0;
+    draw_cursor();
+}
 static void redraw_all(void); // definida após struct surf
 static void fb_blit_shm(struct wl_shm_buffer *shmb, int dst_x, int dst_y){
     if(!fb_addr || !shmb) return;
@@ -173,12 +201,19 @@ static void fb_blit_shm(struct wl_shm_buffer *shmb, int dst_x, int dst_y){
         }
     }
     wl_shm_buffer_end_access(shmb);
-    char tmp[128]; snprintf(tmp,sizeof(tmp),"[WL-LIB] blit %dx%d at %d,%d\n",w,h,dst_x,dst_y); wlog(tmp);
-    int cx=dst_x+w/2, cy=dst_y+h/2;
-    if(cx>=0&&cx<fb_w&&cy>=0&&cy<fb_h){
-        uint32_t pix=dst[cy*fb_pitch+cx];
-        snprintf(tmp,sizeof(tmp),"[WL-LIB] fb pixel %d,%d = 0x%08x\n",cx,cy,pix); wlog(tmp);
+    {
+        static int hot_init=0, hot_on=0;
+        if(!hot_init){ hot_init=1; hot_on=(getenv("WL_LOG_HOT")!=0); }
+        if(hot_on){
+            char tmp[128]; snprintf(tmp,sizeof(tmp),"[WL-LIB] blit %dx%d at %d,%d\n",w,h,dst_x,dst_y); wlog(tmp);
+            int cx=dst_x+w/2, cy=dst_y+h/2;
+            if(cx>=0&&cx<fb_w&&cy>=0&&cy<fb_h){
+                uint32_t pix=dst[cy*fb_pitch+cx];
+                snprintf(tmp,sizeof(tmp),"[WL-LIB] fb pixel %d,%d = 0x%08x\n",cx,cy,pix); wlog(tmp);
+            }
+        }
     }
+    cursor_stale=1; // conteúdo sob o cursor mudou
     draw_cursor(); // cursor server-side sempre por cima
 }
 
@@ -1344,6 +1379,14 @@ static void cursor_idle_cb(void *data){
     cursor_idle_on=0;
     if(!cursor_dirty) return;
     cursor_dirty=0;
+    /* movimento puro: fast-path do cursor. Qualquer outra coisa
+     * (drag/resize/blit) cai no repaint total. */
+    if(!cursor_stale && !drag_surf && !rs.s){
+        cursor_restore();
+        cursor_save_draw();
+        return;
+    }
+    cursor_saved=0;
     redraw_all();
 }
 // repaint total: FUNDO + mapped + cursor por cima. O fill apaga o
@@ -1368,6 +1411,7 @@ static void redraw_all(void){
         if(s->is_layer && (s->layer==2||s->layer==3)) wm_blit_layer(s);
     }
     draw_cursor();
+    cursor_saved=0; cursor_stale=0; // repaint total invalida o fast-path
 }
 // ---- input real via evdev (espelha wayland_compositor_shm.c) ----
 static uint32_t ev_time=1000;

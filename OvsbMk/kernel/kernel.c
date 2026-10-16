@@ -112,6 +112,13 @@ void kmain(uint32_t magic, uint32_t mb_info) {
     /* Boot direto no desktop; o shell continua disponivel via syscall. */
     shell_init();
 
+    /* Sistema pronto: libera a preempção por timer (antes disso, ticks
+     * durante o bring-up veriam PCB semi-construída). */
+    {
+        extern volatile int sched_active;
+        sched_active = 1;
+    }
+
     /* ♥ OWT pronto! Digite 'owt' no shell pra testar */
 
     while (1) {

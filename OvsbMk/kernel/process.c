@@ -444,7 +444,17 @@ static int find_next_ready(void) {
 
 /* ♥ schedule ~ Round-robin scheduler chamado pelo timer! */
 /* ~ essa funcao aqui e a mais importante, presta atencao baka! */
+/* Preempção por timer só após o boot (kernel_main liga). Antes disso,
+ * ticks durante o bring-up veriam PCB semi-construída. */
+volatile int sched_active = 0;
+
 void schedule(void) {
+    /* Anti-reentrância: timer_tick (preempção) pode interromper o
+     * schedule() do kernel_main no meio. Aninhar corromperia prev/next.
+     * Quem chamou aninhado só volta (need_sched já está setado). */
+    static volatile int in_sched = 0;
+    if (in_sched) return;
+    in_sched = 1;
     int next_idx = find_next_ready();
     {
         static int dbg_sch = 0;
@@ -464,9 +474,11 @@ void schedule(void) {
          * Sem isso, com IF=0 em syscall + todos bloqueados, ninguém
          * volta a userspace, IRQs pendentes nunca atendidas (timer
          * morto, mouse morto) = impasse eterno. sti+hlt: seguro aqui
-         * (schedule nunca roda dentro de handler IRQ; handlers não
-         * pegam locks de syscall; IRQ pendente entre sti/hlt acorda). */
+         * (handlers não pegam locks de syscall; IRQ pendente entre
+         * sti/hlt acorda). Pode rodar dentro de handler IRQ (preempção
+         * via timer_tick): só dorme com EOI já enviado. */
         __asm__ volatile("sti; hlt");
+        in_sched = 0;
         return;
     }
     int prev = current_pid;
@@ -494,6 +506,9 @@ void schedule(void) {
         extern volatile int g_in_syscall;
         extern void context_switch_kern(pcb_t *cur, pcb_t *next);
         if (g_in_syscall && pcb_table[prev].is_user) {
+            /* libera a guarda ANTES de trocar: o switch não retorna
+             * aqui (retoma em outro fluxo); limpar depois = nunca. */
+            in_sched = 0;
             context_switch_kern(&pcb_table[prev], &pcb_table[next_idx]);
             /* ~~ fd table POR PROCESSO: religa ao voltar de uma troca ~~
              * `fdtab` (macro `fds`) e global: enquanto o processo A
@@ -506,6 +521,7 @@ void schedule(void) {
                 extern void fds_bind_current(void);
                 fds_bind_current();
             }
+            in_sched = 0;
             return;
         }
     }
@@ -531,6 +547,8 @@ void schedule(void) {
             serial_puts("\r\n");
         }
     }
+    /* libera a guarda ANTES de trocar (não retorna aqui no switch). */
+    in_sched = 0;
     context_switch(&pcb_table[prev], &pcb_table[next_idx]);
     /* ~~ mesma religação do fd table no caminho não-syscall ~~ */
     {

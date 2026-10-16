@@ -30,10 +30,19 @@ void timer_tick_handler(uint64_t *registers) {
     timer_ticks++;
     outb(0x20, 0x20);
     signal_dispatch_irq(registers);
-    /* ~~ Agenda FORA da interrupção: o kernel_main chama schedule()~
-     * (trocar de contexto DENTRO do irq0 abandonava o frame e o
-     *  kernel voltava com IF=0 / estado pela metade~ rssrsrs) */
     need_sched = 1;
+    /* Preempção real: rouba a CPU de loop puro em ring 3 (um spinner
+     * sem syscalls congelava tudo, pois nada mais chamava schedule).
+     * Seguro aqui: viemos de ring 3 (path user do irq0), RBX tem o
+     * frame (callee-saved, intacto), g_in_syscall==0 em user mode
+     * (sempre caminho clássico, nunca IN_KERN). Reentrância com o
+     * schedule() do kernel_main é barrada pela flag lá dentro.
+     * Só após sched_active (boot completo): ticks durante o bring-up
+     * veriam pcb_table semi-construída (#GP no iretq do switch). */
+    {
+        extern volatile int sched_active;
+        if (sched_active) schedule();
+    }
 }
 
 /* ~~ Inicializando~~ torce pra não dar panic! */
