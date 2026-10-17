@@ -9,15 +9,15 @@
 # Lista exit codes em /tmp/qemu-rc.log.
 cd "$(dirname "$0")/.." || exit 1
 MODE="${1:-vga}"
-SER="${2:-/tmp/vga.log}"
-BIN=/home/gabicnt/bin/qemu-system-x86_64
-[ -x "$BIN" ] || BIN=qemu-system-x86_64
+SER="${2:-/tmp/vga.log}"; shift 2 >/dev/null 2>&1
+BIN=qemu-system-x86_64
+
 ACCEL=-enable-kvm; MEM=512M; DISPLAY="-device virtio-vga -display sdl"
 case "$MODE" in
   gl)       DISPLAY="-device virtio-vga-gl -display sdl,gl=on";;
   gl256)    DISPLAY="-device virtio-vga-gl -display sdl,gl=on"; MEM=256M;;
   tcg)      ACCEL=""; DISPLAY="-device virtio-vga-gl -display sdl,gl=on";;
-  headless) DISPLAY="";;
+  headless) DISPLAY="-display none";;
   *)  ;;
 esac
 echo "[$(date +%H:%M:%S)] qemu $MODE start" >> /tmp/qemu-rc.log

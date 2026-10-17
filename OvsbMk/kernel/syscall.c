@@ -1651,19 +1651,6 @@ void syscall_handler(uint64_t *regs) {
     if (syscall_process && syscall_process->is_user)
         syscall_process->user_rsp = current_rsp0;
     uint64_t num  = regs[0];
-    /* ~~ FASE1-redondo (+0x68): tripwire — regs[15] é RIP de retorno nos
-     * dois paths (stash no `syscall`, frame da CPU no int0x80) e SEMPRE
-     * deve ser user. Só lê + serial RARO (provado seguro). ~~ */
-    uint64_t entry_rip = regs[15];
-    int entry_poisoned = (entry_rip >= 0x08000000ULL && entry_rip < 0x09000000ULL);
-    if (entry_poisoned) {
-        serial_puts("[STASH-POISON] pid=");
-        serial_puthex((uint32_t)(syscall_process ? syscall_process->pid : 0xFFFFFFFF));
-        serial_puts(" n="); serial_puthex((uint32_t)num);
-        serial_puts(" rip="); serial_puthex((uint32_t)entry_rip);
-        serial_puts(" rsp0="); serial_puthex((uint32_t)(current_rsp0 & 0xFFFFFFFF));
-        serial_puts("\r\n");
-    }
     uint64_t a1 = regs[4];
     uint64_t a2 = regs[3];
     uint64_t a3 = regs[2];
@@ -6033,19 +6020,6 @@ void syscall_handler(uint64_t *regs) {
         }
     }
     regs[0] = ret;
-    /* ~~ tripwire de saída: o handler não pode mudar o RIP de retorno
-     * (só execve/signal/rt_sigreturn mexem em regs[15] de propósito). ~~ */
-    if (!entry_poisoned && num != 208 && num != 59 && num != 15 &&
-        regs[15] != entry_rip &&
-        regs[15] >= 0x08000000ULL && regs[15] < 0x09000000ULL) {
-        serial_puts("[STASH-CLOBBER] pid=");
-        serial_puthex((uint32_t)(syscall_process ? syscall_process->pid : 0xFFFFFFFF));
-        serial_puts(" n="); serial_puthex((uint32_t)num);
-        serial_puts(" foi="); serial_puthex((uint32_t)entry_rip);
-        serial_puts(" virou="); serial_puthex((uint32_t)regs[15]);
-        serial_puts("\r\n");
-    }
-    if (syscall_process && syscall_process->is_user)
         current_rsp0 = syscall_process->user_rsp;
     if (num != SYS_rt_sigreturn) signal_dispatch_syscall(regs);
     if (syscall_process && syscall_process->is_user)

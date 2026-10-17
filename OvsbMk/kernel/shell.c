@@ -225,6 +225,30 @@ static void cmd_exec(const char *args) {
     }
     console_printf("exec: carregando %s (%d bytes)\n", fname, (unsigned)fsize);
 
+    /* ~~ FASE-CONSOLIDA: .oep (Ovsb Executable Program) — header fixo de
+     * 128 bytes (userspace/libs/oep/oep.h) + ELF cru. Se o magic for
+     * "OEP\0", pula pro elf_offset e segue a receita ELF normal. ~~ */
+    uint8_t *buf_free = buf;
+    if (fsize > 128 && buf[0]=='O' && buf[1]=='E' && buf[2]=='P' && buf[3]=='\0') {
+        uint32_t oep_off = (uint32_t)buf[8] | ((uint32_t)buf[9]<<8) |
+                           ((uint32_t)buf[10]<<16) | ((uint32_t)buf[11]<<24);
+        uint32_t oep_size = (uint32_t)buf[12] | ((uint32_t)buf[13]<<8) |
+                            ((uint32_t)buf[14]<<16) | ((uint32_t)buf[15]<<24);
+        if (oep_off >= 128 && oep_off < fsize &&
+            oep_size <= fsize - oep_off &&
+            buf[oep_off]==0x7F && buf[oep_off+1]=='E' &&
+            buf[oep_off+2]=='L' && buf[oep_off+3]=='F') {
+            console_printf("exec: .oep ok (elf em +%u, %u bytes)\n",
+                           oep_off, oep_size);
+            buf += oep_off;
+            fsize = oep_size;
+        } else {
+            console_write("exec: .oep invalido\n");
+            kfree(buf_free);
+            return;
+        }
+    }
+
     /* Detect ELF vs Mach-O */
     int is_elf = (fsize >= 4 && buf[0] == 0x7F && buf[1] == 'E' && buf[2] == 'L' && buf[3] == 'F');
     if (is_elf) {
@@ -232,7 +256,7 @@ static void cmd_exec(const char *args) {
          * Clona a PML4, carrega o binario, monta a pilha Linux~
          * e cria o processo com proc_spawn (a API nova!) */
         uint64_t child_pml4 = clone_identity_tables();
-        if (!child_pml4) { kfree(buf); console_write("exec: pml4 falhou\n"); return; }
+        if (!child_pml4) { kfree(buf_free); console_write("exec: pml4 falhou\n"); return; }
 
         Elf64_Ehdr *ehdr = (Elf64_Ehdr *)buf;
         uint64_t elf_base = (ehdr->e_type == 3) ? elf64_pie_base() : 0; /* ET_DYN = PIE */
@@ -277,7 +301,7 @@ static void cmd_exec(const char *args) {
         int ilen = -1;
         if (is_elf)
             ilen = elf64_find_interp(buf, fsize, interp_path, sizeof(interp_path));
-        if (!entry) { kfree(buf); }
+        if (!entry) { kfree(buf_free); }
         if (ilen > 0) {
             serial_puts("[dyn] interp=");
             serial_puts(interp_path);
@@ -317,7 +341,7 @@ static void cmd_exec(const char *args) {
                 console_write("exec: dynlink falhou\n");
             }
         }
-        if (buf) { kfree(buf); }
+        if (buf) { kfree(buf_free); }
         if (!entry && !dyn_is_dynamic) { console_write("exec: ELF invalido\n"); return; }
         if (dyn_is_dynamic) {
             /* ~~ entry REAL = o do ld.so (ele pula pro binário depois)~~
@@ -639,6 +663,10 @@ void shell_init(void) {
     cmd_exec("/BIN/SIGCHLD_TEST");
     cmd_exec("/BIN/SIGWINCH_TEST");
     cmd_exec("/BIN/DYN_TEST");
+    /* FASE-CONSOLIDA: valida o loader .oep no execve do cmd_exec */
+    /* FASE-CONSOLIDA: valida .oep em background (não bloqueia o boot) */
+    cmd_exec("/BIN/EDITOR.OEP &");
+    sleep_ms(4000);
     cmd_exec("/BIN/HELLO_DYN");
     /* AUTO-BOOT Fase 8.1: compositor + desktop (foot manual via menu). */
     cmd_exec("/BIN/WAYLAND_COMPOSITOR_LIB &");
