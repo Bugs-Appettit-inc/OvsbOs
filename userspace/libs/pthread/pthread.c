@@ -1,15 +1,15 @@
 /* pthread.c - implementação mínima de pthreads sobre o kernel OvsbMk
  *
- * Baseado nos primitivos já existentes no kernel:
+ * Primitivos do kernel:
  *   syscall 56 = clone(CLONE_THREAD|CLONE_VM|...)  -> proc_clone_thread
  *   syscall 96 = futex(FUTEX_WAIT/FUTEX_WAKE)      -> sincronização
- *   syscall  1 = exit                               -> proc_thread_exit (thread)
- *   syscall 20 = getpid                             -> op_pthread_self
+ *   syscall  1 = exit                               -> proc_thread_exit
+ *   syscall 20 = getpid                             -> identificador de grupo
  *
- * O trampolino: clone retorna RAX=0 na nova thread e RAX=tid no pai.
- * Ambas continuam no mesmo ponto após o syscall; o filho (RAX==0)
- * salta para op_pthread_thread_trampoline, que lê fn/arg de slots
- * globais indexados por tid.
+ * Modelo de execução:
+ *   clone() copia o frame do pai; a filha começa com RAX=0 e RSP = stack_top.
+ *   fn/arg são passados através de slots indexados pelo endereço da pilha
+ *   (salvos ANTES do clone, sem globais compartilhados -> sem corrida).
  */
 
 #include "pthread.h"
@@ -19,14 +19,19 @@
 #define MAX_THREADS 16
 #define STACK_SIZE  (64 * 1024)
 
-static void *(*thread_fn[MAX_THREADS])(void *);
-static void  *thread_arg[MAX_THREADS];
-static op_pthread_t thread_tids[MAX_THREADS];
-static int thread_slot[MAX_THREADS];
+typedef struct {
+    uint64_t stack_addr;  /* chave: endereço do topo da pilha da thread */
+    void *(*fn)(void *);
+    void  *arg;
+    op_pthread_t tid;
+    int used;
+} thread_slot_t;
+
+static thread_slot_t thread_slots[MAX_THREADS];
 static uint8_t thread_stacks[MAX_THREADS][STACK_SIZE];
 static int nthreads = 0;
 
-/* ---------- syscalls diretas (inline asm) ---------- */
+/* ---------- syscalls diretas ---------- */
 
 static inline long sys_clone(uint64_t flags, uint64_t stack,
                              uint64_t ptid, uint64_t tls, uint64_t ctid) {
@@ -82,14 +87,24 @@ static inline int sys_getpid(void) {
 static void op_pthread_thread_trampoline(void) __attribute__((noreturn));
 
 static void op_pthread_thread_trampoline(void) {
-    op_pthread_t self = op_pthread_self();
-    int idx = -1;
+    /* Cada thread começa com RSP = stack_top (definido no clone). Busca o
+     * slot por esse endereço. Usa < (topo é exclusive upper bound) porque
+     * RSP aponta para o primeiro byte livre acima da região usável. */
+    uint64_t rsp;
+    __asm__ volatile ("mov %%rsp, %0" : "=r"(rsp));
+
+    void *(*fn)(void *) = NULL;
+    void  *arg = NULL;
     for (int i = 0; i < MAX_THREADS; i++) {
-        if (thread_tids[i] == self) { idx = i; break; }
+        if (thread_slots[i].used &&
+            thread_slots[i].stack_addr == rsp) {
+            fn = thread_slots[i].fn;
+            arg = thread_slots[i].arg;
+            break;
+        }
     }
-    if (idx < 0) sys_exit(1);
-    void *(*fn)(void *) = thread_fn[idx];
-    void *arg = thread_arg[idx];
+    if (!fn) sys_exit(1);
+
     void *retval = fn(arg);
     op_pthread_exit(retval);
     for (;;) __asm__ volatile ("hlt");
@@ -103,32 +118,43 @@ int op_pthread_create(op_pthread_t *thread_, const op_pthread_attr_t *attr_,
 
     int idx = -1;
     for (int i = 0; i < MAX_THREADS; i++) {
-        if (!thread_slot[i]) { idx = i; break; }
+        if (!thread_slots[i].used) { idx = i; break; }
     }
     if (idx < 0) return -12; /* ENOMEM */
 
     uint64_t stack_top = (uint64_t)(thread_stacks[idx] + STACK_SIZE);
 
+    /* ~~ Salva fn/arg ANTES do clone, indexados por stack_addr.
+     * Assim a filha acha seus próprios argumentos sem ler globais
+     * que o pai poderia sobrescrever (condicao de corrida). ~~ */
+    thread_slots[idx].stack_addr = stack_top;
+    thread_slots[idx].fn = start_routine_;
+    thread_slots[idx].arg = arg_;
+    thread_slots[idx].tid = 0;
+    thread_slots[idx].used = 1;
+
     long child = sys_clone(
         0x00010100ULL | 0x00000100ULL | 0x00000200ULL | 0x00000400ULL |
         0x00000800ULL | 0x00080000ULL | 0x00100000ULL | 0x00200000ULL,
         stack_top,
-        (uint64_t)(uintptr_t)&thread_tids[idx],  /* ptid */
-        0,                                        /* tls  */
-        (uint64_t)(uintptr_t)&thread_tids[idx]);  /* ctid */
+        (uint64_t)(uintptr_t)&thread_slots[idx].tid,  /* ptid */
+        0,                                            /* tls  */
+        (uint64_t)(uintptr_t)&thread_slots[idx].tid); /* ctid */
 
     if (child == 0) {
-        /* nova thread */
-        thread_fn[idx] = start_routine_;
-        thread_arg[idx] = arg_;
+        /* filha: continua no trampolino (RIP do clone aponta de volta aqui,
+         * mas a filha executa o trampolino via op_pthread_thread_trampoline
+         * chamada a partir deste mesmo ponto -- veja nota abaixo). */
         op_pthread_thread_trampoline();
         for (;;) __asm__ volatile ("hlt");
     }
 
-    if (child < 0) return (int)child;
+    if (child < 0) {
+        thread_slots[idx].used = 0;
+        return (int)child;
+    }
 
-    thread_slot[idx] = 1;
-    thread_tids[idx] = (op_pthread_t)child;
+    thread_slots[idx].tid = (op_pthread_t)child;
     nthreads++;
     *thread_ = (op_pthread_t)child;
     return 0;
@@ -138,9 +164,8 @@ void op_pthread_exit(void *retval_) {
     (void)retval_;
     op_pthread_t self = op_pthread_self();
     for (int i = 0; i < MAX_THREADS; i++) {
-        if (thread_tids[i] == self) {
-            thread_slot[i] = 0;
-            thread_tids[i] = 0;
+        if (thread_slots[i].used && thread_slots[i].tid == self) {
+            thread_slots[i].used = 0;
             nthreads--;
             break;
         }
@@ -151,10 +176,10 @@ void op_pthread_exit(void *retval_) {
 int op_pthread_join(op_pthread_t thread_, void **retval_) {
     (void)retval_;
     for (int i = 0; i < MAX_THREADS; i++) {
-        if (thread_tids[i] == thread_ && thread_slot[i]) {
-            /* futex WAIT no clear_tid: o kernel zera clear_tid no exit */
-            while (thread_slot[i]) {
-                sys_futex((volatile uint32_t *)&thread_slot[i], 0, 1);
+        if (thread_slots[i].used && thread_slots[i].tid == thread_) {
+            /* futex WAIT no tid: o kernel zera clear_tid na thread exit. */
+            while (thread_slots[i].used) {
+                sys_futex((volatile uint32_t *)&thread_slots[i].used, 0, 1);
             }
             return 0;
         }
@@ -189,17 +214,14 @@ int op_pthread_mutex_unlock(op_pthread_mutex_t *mutex_) {
 }
 
 op_pthread_t op_pthread_self(void) {
-    /* Cada thread tem seu stack único em thread_stacks[]; o RSP de qualquer
-     * ponto da thread cai dentro do range do próprio stack. Usamos isso como
-     * identificador (getpid() nao serve: clone com CLONE_THREAD devolve o
-     * mesmo PID para todas as threads do grupo). */
+    /* Filho: identifica pela pilha. Pai: retorna o PID do grupo (getpid). */
     uint64_t rsp;
     __asm__ volatile ("mov %%rsp, %0" : "=r"(rsp));
     for (int i = 0; i < MAX_THREADS; i++) {
-        if (thread_slot[i] &&
+        if (thread_slots[i].used &&
             rsp >= (uint64_t)thread_stacks[i] &&
             rsp <  (uint64_t)(thread_stacks[i] + STACK_SIZE))
-            return thread_tids[i];
+            return thread_slots[i].tid;
     }
-    return 0;
+    return (op_pthread_t)sys_getpid();
 }

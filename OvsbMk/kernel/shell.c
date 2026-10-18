@@ -667,10 +667,17 @@ void shell_init(void) {
     /* FASE-CONSOLIDA: valida .oep em background (não bloqueia o boot) */
     cmd_exec("/BIN/EDITOR.OEP &");
     sleep_ms(4000);
-    cmd_exec("/BIN/HELLO_DYN");
+    /* cmd_exec("/BIN/HELLO_DYN");  -- pulado: crash pré-existente em binário dinâmico */
     /* AUTO-BOOT Fase 8.1: compositor + desktop (foot manual via menu). */
     cmd_exec("/BIN/WAYLAND_COMPOSITOR_LIB &");
     sleep_ms(2000);
+    /* FASE 4: valida libwayland-client (conecta ao compositor acima). */
+    cmd_exec("/BIN/WAYLAND");
+    /* FASE 2: valida pthreads (clone+futex) — mínimo primeiro. */
+    cmd_exec("/BIN/PTHREADM");
+    cmd_exec("/BIN/PTHREADT");
+    /* FASE 3: valida dlopen/dlsym. */
+    cmd_exec("/BIN/DLTEST");
     /* FASE-CONSOLIDA: desktop via .oep (valida o loader no boot). */
     cmd_exec("/BIN/OVSB-DESK.OEP &");
     sleep_ms(2000);
