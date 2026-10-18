@@ -75,3 +75,7 @@ src/userland/progs/doom/DOOMWL.ELF
 src/userland/progs/doom/tipOS_wayland.c
 *.a
 *.so
+userspace/apps/minigl_test/minigl_test
+userspace/apps/pthread_test/pthread_test
+userspace/apps/pthread_test/pthread_min
+userspace/apps/wayland_lib_test/wayland_lib_test
