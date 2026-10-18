@@ -241,12 +241,33 @@ $(BUILD_DIR)/LAYER_SHELL_TEST: $(TESTS_DIR)/layer_shell_test.c | $(BUILD_DIR)
 build-layer-shell-test: $(BUILD_DIR)/LAYER_SHELL_TEST
 	mcopy -o -i ../disk.img $(BUILD_DIR)/LAYER_SHELL_TEST ::/BIN/LAYER_SHELL_TEST
 
+# ♥ FASE-DIAG-VISUAL: ferramenta .oep (o desktop é empacotado em .oep;
+# o cache do menu também consulta o header dos apps com ela).
+OEP_PACK := ../userspace/tools/oep-pack/oep-pack
+$(OEP_PACK):
+	$(MAKE) -C ../userspace/tools/oep-pack
+
 # ♥ FASE 8.1: ovsb-desktop (wallpaper + barra + relógio, protocolo raw)
-$(BUILD_DIR)/OVSB-DESKTOP: $(TESTS_DIR)/desktop/ovsb-desktop.c | $(BUILD_DIR)
+# DIAG-VISUAL: menu_cache.h = cache estático do scan do launcher (tira o
+# churn de fork/getdents/open do runtime — ver gen-menu-cache.sh).
+MENU_CACHE := $(TESTS_DIR)/desktop/menu_cache.h
+DISK_IF_EXISTS := $(wildcard ../disk.img)
+$(MENU_CACHE): $(TESTS_DIR)/desktop/gen-menu-cache.sh $(OEP_PACK) $(DISK_IF_EXISTS)
+	$(TESTS_DIR)/desktop/gen-menu-cache.sh ../disk.img $@
+
+$(BUILD_DIR)/OVSB-DESKTOP: $(TESTS_DIR)/desktop/ovsb-desktop.c $(MENU_CACHE) | $(BUILD_DIR)
 	$(CC) -static -O2 -Wall -o $@ $<
 
 build-ovsb-desktop: $(BUILD_DIR)/OVSB-DESKTOP
 	mcopy -o -i ../disk.img $(BUILD_DIR)/OVSB-DESKTOP ::/BIN/OVSB-DESKTOP
+
+# ♥ FASE-DIAG-VISUAL: desktop empacotado em .oep (é o que o boot executa:
+# cmd_exec /BIN/OVSB-DESK.OEP). Reconstrução reproduzível do pacote.
+$(BUILD_DIR)/OVSB-DESK.OEP: $(BUILD_DIR)/OVSB-DESKTOP $(OEP_PACK)
+	$(OEP_PACK) $(BUILD_DIR)/OVSB-DESKTOP Desktop system -o $@
+
+build-ovsb-desktop-oep: $(BUILD_DIR)/OVSB-DESK.OEP
+	mcopy -o -i ../disk.img $(BUILD_DIR)/OVSB-DESK.OEP ::/BIN/OVSB-DESK.OEP
 
 $(BUILD_DIR)/MEMFD_TEST: $(TESTS_DIR)/memfd_test.c | $(BUILD_DIR)
 	gcc -static -O2 -Wall -fno-stack-protector -U_FORTIFY_SOURCE -o $@ $<

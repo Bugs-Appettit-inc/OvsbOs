@@ -28,6 +28,9 @@
 #include <sys/wait.h>
 #include <sys/syscall.h>
 extern char **environ;
+/* DIAG-VISUAL: cache estático dos apps .oep (gerado por gen-menu-cache.sh
+ * a partir do disk.img; runtime NÃO faz getdents/open de scan). */
+#include "menu_cache.h"
 #ifndef SYS_memfd_create
 #define SYS_memfd_create 319
 #endif
@@ -314,6 +317,15 @@ struct lxd { int64_t d_ino; int64_t d_off; unsigned short d_reclen; unsigned cha
  * Modo 1 foi diagnóstico (separar open/read de getdents); resultado:
  * ambos crasham igual → open/read inocentados. Manter 0 (produto). */
 #define SCAN_NAMES_ONLY 0
+/* DIAG-VISUAL (FASE3.1): nome termina em ".oep" (case-insensitive)?
+ * Filtro ANTES do open — /BIN tem ~60 ELFs p/ 6 .oep; abrir todos era
+ * o churn de open/read que alimentava a corrupção de frame (+0x68). */
+static int oep_ext_of(const char *nm){
+    int l=0; while(nm[l]) l++;
+    if(l<4) return 0;
+    const char *e=nm+l-4;
+    return e[0]=='.'&&(e[1]=='o'||e[1]=='O')&&(e[2]=='e'||e[2]=='E')&&(e[3]=='p'||e[3]=='P');
+}
 static int scan_dir(const char *dir){
     static char dbuf[8192];
     int dfd=open(dir,O_RDONLY);
@@ -343,7 +355,7 @@ static int scan_dir(const char *dir){
                 menu_apps[menu_n].name[i]=0;
                 menu_n++; added++;
 #else
-                int f=open(full,O_RDONLY);
+                int f=oep_ext_of(nm)?open(full,O_RDONLY):-1;
                 if(f>=0){
                     /* FASE-CONSOLIDA: launcher só .oep — magic "OEP\0" +
                      * nome/categoria do header de 128B. ELF crus e testes
@@ -594,19 +606,31 @@ static int menu_rescan(void){
     }
     return menu_n;
 }
-/* Garante cache válido (mtime): 1 = lista pronta (nova ou antiga). */
-static int menu_ensure(void){
-    static long cache_bin_mt=0, cache_apps_mt=0;
-    static int cache_valid=0;
-    struct stat stb;
-    long mt1=-1, mt2=-1;
-    if(stat("/BIN",&stb)==0) mt1=(long)stb.st_mtime;
-    if(stat("/APPS",&stb)==0) mt2=(long)stb.st_mtime;
-    if(cache_valid && mt1==cache_bin_mt && mt2==cache_apps_mt) return 1;
-    if(menu_rescan()>0){
-        cache_bin_mt=mt1; cache_apps_mt=mt2; cache_valid=1;
-        return 1;
+/* DIAG-VISUAL (FASE3.1): cache ESTÁTICO do scan, gerado no build a partir
+ * do disk.img (gen-menu-cache.sh -> menu_cache.h). O scan em runtime
+ * (fork+getdents+open por arquivo) era o churn que corrompia frames de
+ * usuário (+0x68) e resetava o guest — em runtime aqui só há stat() por
+ * app (1x). O fork-scan (menu_rescan) fica como fallback. */
+static int menu_cache_commit(void){
+    int n=0;
+    for(int i=0;i<MENU_CACHE_N && n<MENU_MAXN;i++){
+        struct stat stb;
+        if(stat(menu_cache[i].path,&stb)!=0) continue; /* lista velha: pula */
+        snprintf(menu_apps[n].path,sizeof(menu_apps[n].path),"%s",menu_cache[i].path);
+        snprintf(menu_apps[n].name,sizeof(menu_apps[n].name),"%s",menu_cache[i].name);
+        snprintf(menu_apps[n].cat,sizeof(menu_apps[n].cat),"%s",menu_cache[i].cat);
+        n++;
     }
+    menu_n=n;
+    if(n>0) sort_apps();
+    return n;
+}
+/* Garante cache válido: 1 = lista pronta (estática ou scan antigo). */
+static int menu_ensure(void){
+    static int cache_valid=0;
+    if(cache_valid) return 1;
+    if(menu_cache_commit()>0){ cache_valid=1; return 1; }
+    if(menu_rescan()>0){ cache_valid=1; return 1; }
     return menu_n>0; /* falhou mas tem lista antiga: serve */
 }
 static void menu_try_open(int fd){
@@ -764,8 +788,12 @@ static int run_session(int sess){
     { uint8_t b[12]; wr32(b,17); wr32(b+4,0); wr32(b+8,0); send_msg(fd,14,1,b,12); }
     send_msg(fd,14,6,NULL,0);
     dlog("[DESKTOP] bar committed\n");
-    /* pre-warm do menu em filho (não trava a barra se o scan morrer) */
-    menu_ensure();
+    /* DIAG-VISUAL (FASE3.1): pre-warm do menu REMOVIDO do boot. O scan
+     * (~250 syscalls de open/read/close em FAT32) no pico do boot era o
+     * churn que disparava a corrupção de frame (+0x68) e o reset do guest
+     * (QMP: SHUTDOWN reason=guest-reset → QEMU morre com -no-reboot).
+     * Agora o scan é preguiçoso: só no 1º clique do INICIAR (menu_ensure
+     * dentro de menu_try_open), ~8× mais curto (filtro .oep) + cache mtime. */
     /* --- loop: ack configures + relógio REALTIME 1s + pointer --- */
     unsigned tick=0;
     unsigned last_clk=0xFFFFFFFFu;
@@ -812,8 +840,14 @@ static int run_session(int sess){
                             int row=(ptr_sy-MENU_PAD)/MENU_ROW_H;
                             if(row>=0 && row<drow_n && ptr_sx>=0 && (unsigned)ptr_sx<menu_w){
                                 int k=drow_kind[row];
-                                if(k>=0)
+                                if(k>=0){
+                                    /* DIAG-VISUAL: fecha o menu ANTES do fork/exec
+                                     * (menos camadas + menos tráfego do compositor
+                                     * durante o handshake do app novo — menor churn
+                                     * concorrente = janela do +0x68 reduzida). */
+                                    menu_close(fd);
                                     do_launch(menu_apps[k].path);
+                                }
                             }
                             /* header ou fora: ignora */
                         } else {
