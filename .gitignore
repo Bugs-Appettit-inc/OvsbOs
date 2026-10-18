@@ -73,3 +73,4 @@ userspace/tools/dev/omake
 userspace/tools/dev/oman
 src/userland/progs/doom/DOOMWL.ELF
 src/userland/progs/doom/tipOS_wayland.c
+*.a

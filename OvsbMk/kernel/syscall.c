@@ -84,6 +84,11 @@ extern int  mice_avail_count(void);
 extern unsigned char mice_peek(int);
 extern unsigned char mice_read(void);
 
+extern int dynlink_process(uint64_t pml4, uint8_t *buf, uint32_t fsize,
+                           uint64_t main_base);
+extern int vfs_stat_size_attr(const char *path, uint32_t *size, uint8_t *attr);
+extern int vfs_read_file(const char *path, uint8_t *buf, uint32_t count);
+
 #define MAX_FDS 64   /* fase 7: 16 nao bastava — accept do Xorg falhava nofd */
 /* ~~ fd table POR PROCESSO (fork real #72) ~~
  * Antes era global: close() do filho fechava fd do pai e o
@@ -5978,6 +5983,45 @@ void syscall_handler(uint64_t *regs) {
             dst[2 + i] = '\0';
         }
         ret = 0;
+        break;
+    }
+
+    case SYS_dlopen: {
+        /* ~~ dlopen(path) -> carrega .so via dynlink_process do kernel.
+         * Retorna base de carregamento (0x48000000) ou -1. ~~ */
+        char *upath = (char *)(uintptr_t)a1;
+        char kpath[256];
+        int i;
+        for (i = 0; i < 255; i++) {
+            char c = upath[i];
+            kpath[i] = c;
+            if (c == 0) break;
+        }
+        kpath[i] = 0;
+        if (i >= 255) { ret = -1; break; }
+
+        uint32_t fsz;
+        uint8_t attr;
+        if (vfs_stat_size_attr(kpath, &fsz, &attr) < 0 || !fsz) {
+            ret = -1; break;
+        }
+        uint8_t *buf = kmalloc(fsz + 1);
+        if (!buf) { ret = -1; break; }
+        if (vfs_read_file(kpath, buf, fsz) < 0) {
+            kfree(buf);
+            ret = -1; break;
+        }
+
+        pcb_t *cur = process_current();
+        if (!cur) { kfree(buf); ret = -1; break; }
+
+        uint64_t cr3;
+        __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+
+        int dlret = dynlink_process(cr3, buf, fsz, 0x48000000ULL);
+        kfree(buf);
+        if (dlret < 0) { ret = -1; break; }
+        ret = 0x48000000ULL; /* base de carregamento */
         break;
     }
 

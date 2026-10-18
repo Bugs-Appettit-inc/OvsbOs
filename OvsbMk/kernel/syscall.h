@@ -1698,6 +1698,7 @@ struct iovec {
 #define SYS_set_robust_list 273
 #define SYS_get_robust_list 274
 #define SYS_rseq           334
+#define SYS_dlopen         300   /* dlopen(path) -> entry address ou 0 */
 
 void syscall_init(void);
 void syscall_handler(uint64_t *regs);
