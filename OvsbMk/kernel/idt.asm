@@ -95,6 +95,9 @@ ISR_NOERR 31
 ; (primeiro push = topo da stack = último offset no struct)~
 global syscall_isr
 extern syscall_handler_zig
+extern frame_rb
+extern frame_w
+extern current_pid
 syscall_isr:
     ; A CPU ja empilhou SS, RSP, RFLAGS, CS, RIP (vindo do ring 3)
     push r15            ; salva todos os 15 GPRs ~ struct começa com r15
@@ -169,8 +172,44 @@ irq0:
     inc qword [rel timer_ticks]
     mov al, 0x20
     out 0x20, al
+    ; ~~ frame_trace tag=3: irq0 interrompeu o kernel em ring 0 ~~
+    ; Se o RIP interrompido (f0) estiver na cauda do syscall_entry e
+    ; o rsp (f3) for o stack do usuario, a IRQ pisou no frame do iretq
+    ; que ainda estava sendo montado no stack do usuario — e e a causa
+    ; do +0x68 (slot RIP gravado com um endereco de .text do kernel).
+    push rax
+    push rdx
+    push r8
+    push r9
+    push r10
+    rdtsc
+    shl rdx, 32
+    or rax, rdx
+    mov r8d, dword [current_pid]
+    mov r9, [frame_w]
+    inc qword [frame_w]
+    and r9, 31
+    mov r10, frame_rb
+    shl r9, 6
+    lea r10, [r10 + r9]
+    mov [r10 + 0], rax          ; tsc
+    mov [r10 + 8], r8           ; pid
+    mov dword [r10 + 12], 3     ; tag = 3 (irq0 ring 0)
+    mov r9, [rsp + 48]          ; f0 RIP interrompido (frame de hardware, rsp-=40 com os pushes)
+    mov [r10 + 16], r9
+    mov r9, [rsp + 56]          ; f1 CS interrompido
+    mov [r10 + 24], r9
+    mov r9, [rsp + 64]          ; f2 RFLAGS interrompido
+    mov [r10 + 32], r9
+    mov [r10 + 40], rsp         ; f3 kernel rsp no momento da IRQ
+    pop r10
+    pop r9
+    pop r8
+    pop rdx
     pop rax
+    pop rax                 ; balanceia o push rax original
     iretq
+
 .from_user:
     ; From ring 3: CPU pushed SS, RSP, RFLAGS, CS, RIP (5 values).
     push rax

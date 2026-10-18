@@ -25,6 +25,9 @@ extern current_pid
 section .text
 global syscall_entry
 extern syscall_handler_zig
+extern frame_rb
+extern frame_w
+extern current_pid
 
 
 syscall_entry:
@@ -33,6 +36,17 @@ syscall_entry:
     ; rsp = user stack pointer
     ; rax = syscall number
     ; rdi = arg1, rsi = arg2, rdx = arg3, r10 = arg4, r8 = arg5, r9 = arg6
+    ; Clobbers: rcx, r11 (salvos pela CPU em return RIP/RFLAGS)
+
+    ; ~~ FASE1-redondo (+0x68): desliga IRQs para TODA a syscall.
+    ; O epilogo monta o frame do iretq no stack do usuario (linhas 136-142)
+    ; com rsp=usuario ainda em ring 0; uma irq0 (PIT) caindo nessa janela
+    ; sobrescreve o slot RIP do frame com o endereco de .text da propria
+    ; instrucao interrompida e o iretq devolve pro kernel em ring 3
+    ; (PF err=0x15 em endereco do .text, ex.: 0x08028239/0x080285F8).
+    ; FMASK ja limpa IF na entrada; o cli garante a invariante mesmo se
+    ; algo mais abaixo houver sti. O iretq restaura os flags do usuario.
+    cli
 
     ; Troca stack: salva user RSP em current_rsp0, carrega kernel stack
     xchg rsp, [current_rsp0]    ; rsp=kernel_stack, mem=user_rsp
@@ -47,6 +61,39 @@ syscall_entry:
     sub rsp, 16
     mov [rsp], rcx              ; return RIP original
     mov [rsp + 8], r11          ; return RFLAGS original
+
+    ; ~~ frame_trace tag=1 (save): frame de usuario antes do frame C ~~
+    ; rsp = KSP0-16 (apos o sub). cli ativo: nao ha irq entre aqui e o iretq.
+    mov r8d, dword [current_pid]   ; pid (clobbera r8; nao precisamos dele)
+    push rax
+    push rdx
+    push r9
+    push r10
+    push r11                       ; r11 = user RFLAGS de return (preservado na pilha)
+    rdtsc
+    shl rdx, 32
+    or rax, rdx                    ; rax = tsc
+    mov r9, [frame_w]
+    inc qword [frame_w]
+    and r9, 31
+    mov r10, frame_rb
+    shl r9, 6
+    lea r10, [r10 + r9]
+    mov [r10 + 0], rax             ; tsc
+    mov [r10 + 8], r8d             ; pid
+    mov dword [r10 + 12], 1        ; tag = 1 (save)
+    mov [r10 + 16], rcx            ; f0 user RIP de return (registrador, da CPU no syscall)
+    mov [r10 + 24], r11            ; f1 user RFLAGS de return (registrador, da CPU no syscall)
+    mov r9, [current_rsp0]         ; user rsp apos o xchg
+    mov [r10 + 32], r9             ; f2 user rsp
+    mov [r10 + 40], rsp            ; f3 kernel rsp neste ponto
+    mov [r10 + 48], rcx            ; f4 return RIP (espelho do slot dedicado)
+    mov [r10 + 56], r11            ; f5 return RFLAGS (espelho)
+    pop r11
+    pop r10
+    pop r9
+    pop rdx
+    pop rax
 
     ; Salva registradores que a C espera preservados (callee-saved)
     ; + registradores voláteis que precisamos passar pro handler
@@ -98,6 +145,43 @@ syscall_entry:
     pop r13
     pop r14
     pop r15
+
+    ; ~~ frame_trace tag=2 (restore): antes de montar o frame do iretq ~~
+    ; rsp = U (stack do usuario). Os slots do iretq em [U-40..U-8] ainda
+    ; nao foram escritos pelas linhas abaixo; lê-los aqui (antes dos pushes,
+    ; cli ativo => nao ha irq que os mude) mostra o que o iretq IRA ler.
+    mov r8d, dword [current_pid]   ; pid
+    mov r9, [rsp - 40]             ; f3 = conteudo atual do slot RIP do user
+    mov r10, [rsp - 32]            ; f4 = conteudo atual do slot CS
+    mov r11, [rsp - 24]            ; f5 = conteudo atual do slot RFLAGS
+    push rax
+    push rdx
+    push r9
+    push r10
+    push r11
+    rdtsc
+    shl rdx, 32
+    or rax, rdx                    ; rax = tsc
+    mov r9, [frame_w]
+    inc qword [frame_w]
+    and r9, 31
+    mov r10, frame_rb
+    shl r9, 6
+    lea r10, [r10 + r9]
+    mov [r10 + 0], rax             ; tsc
+    mov [r10 + 8], r8d             ; pid
+    mov dword [r10 + 12], 2        ; tag = 2 (restore)
+    mov [r10 + 16], rcx            ; f0 user RIP de return (registrador arg4 aqui; ver tag=1 para o alvo)
+    mov [r10 + 24], r11            ; f1 user RFLAGS de return (registrador)
+    mov [r10 + 32], rsp            ; f2 user rsp
+    mov [r10 + 40], r9             ; f3 slot RIP (valor do stack do usuario antes da escrita)
+    mov [r10 + 48], r10            ; f4 slot CS (valor do stack do usuario)
+    mov [r10 + 56], r11            ; f5 slot RFLAGS (valor do stack do usuario)
+    pop r11
+    pop r10
+    pop r9
+    pop rdx
+    pop rax
 
     ; ~~ Restaura return RIP/RFLAGS originais (ignora rcx do frame) ~~
     ; O slot rcx do frame carrega o ARG4 (r10) por construção — nunca o

@@ -179,6 +179,13 @@ void idt_handler(uint64_t *regs) {
             serial_puthex((uint32_t)regs[17]);
             serial_puts(" U_RSP=");
             serial_puthex((uint32_t)regs[20]);
+
+            /* ~~ frame_trace: PF de fetch de pagina do supervisor vinda do
+             * ring 3 (assinatura do +0x68) -> desfoga o anel de frames
+             * do syscall para identificar o slot corrompido. ~~ */
+            extern void frame_dump(uint64_t rip, uint64_t cr2, uint64_t err);
+            if ((regs[18] & 3) == 3 && (err_code & 4))
+                frame_dump(regs[17], cr2, err_code);
             serial_puts(" RBP=");
             serial_puthex((uint32_t)regs[8]);
             serial_puts(" RDI=");
