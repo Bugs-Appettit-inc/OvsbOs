@@ -71,6 +71,20 @@ static inline void sys_exit(int code) {
     for (;;) __asm__ volatile ("hlt");
 }
 
+static inline void sys_write(int fd, const char *buf, int len) {
+    long ret;
+    uint64_t fd64 = (uint64_t)fd;
+    uint64_t buf64 = (uint64_t)(uintptr_t)buf;
+    uint64_t len64 = (uint64_t)len;
+    __asm__ volatile (
+        "syscall"
+        : "=a"(ret)
+        : "a"(4), "D"(fd64), "S"(buf64), "d"(len64)
+        : "rcx", "r11", "memory"
+    );
+    (void)ret;
+}
+
 static inline int sys_getpid(void) {
     long ret;
     __asm__ volatile (
@@ -87,6 +101,9 @@ static inline int sys_getpid(void) {
 static void op_pthread_thread_trampoline(void) __attribute__((noreturn));
 
 static void op_pthread_thread_trampoline(void) {
+    const char *msg = "[TRAMPOLINE] started\n";
+    sys_write(1, msg, 21);
+
     /* Cada thread começa com RSP = stack_top (definido no clone). Busca o
      * slot por esse endereço. Usa < (topo é exclusive upper bound) porque
      * RSP aponta para o primeiro byte livre acima da região usável. */
@@ -103,7 +120,11 @@ static void op_pthread_thread_trampoline(void) {
             break;
         }
     }
-    if (!fn) sys_exit(1);
+    if (!fn) {
+        const char *err = "[TRAMPOLINE] no slot found\n";
+        sys_write(1, err, 23);
+        sys_exit(1);
+    }
 
     void *retval = fn(arg);
     op_pthread_exit(retval);
@@ -133,6 +154,9 @@ int op_pthread_create(op_pthread_t *thread_, const op_pthread_attr_t *attr_,
     thread_slots[idx].tid = 0;
     thread_slots[idx].used = 1;
 
+    const char *clone_msg = "[PTHREAD_CREATE] calling clone\n";
+    sys_write(1, clone_msg, 26);
+
     long child = sys_clone(
         0x00010100ULL | 0x00000100ULL | 0x00000200ULL | 0x00000400ULL |
         0x00000800ULL | 0x00080000ULL | 0x00100000ULL | 0x00200000ULL,
@@ -140,6 +164,9 @@ int op_pthread_create(op_pthread_t *thread_, const op_pthread_attr_t *attr_,
         (uint64_t)(uintptr_t)&thread_slots[idx].tid,  /* ptid */
         0,                                            /* tls  */
         (uint64_t)(uintptr_t)&thread_slots[idx].tid); /* ctid */
+
+    const char *after_msg = "[PTHREAD_CREATE] after clone\n";
+    sys_write(1, after_msg, 24);
 
     if (child == 0) {
         /* filha: continua no trampolino (RIP do clone aponta de volta aqui,
@@ -150,9 +177,23 @@ int op_pthread_create(op_pthread_t *thread_, const op_pthread_attr_t *attr_,
     }
 
     if (child < 0) {
+        const char *neg = "[PTHREAD_CREATE] clone failed\n";
+        sys_write(1, neg, 24);
         thread_slots[idx].used = 0;
         return (int)child;
     }
+
+    char pidbuf[32];
+    int pidlen = 0;
+    uint64_t pidval = (uint64_t)child;
+    if (pidval == 0) { pidbuf[pidlen++] = '0'; }
+    else {
+        char tmp[16]; int tlen = 0;
+        while (pidval > 0) { tmp[tlen++] = '0' + pidval % 10; pidval /= 10; }
+        while (tlen > 0) pidbuf[pidlen++] = tmp[--tlen];
+    }
+    pidbuf[pidlen++] = '\n';
+    sys_write(1, pidbuf, pidlen);
 
     thread_slots[idx].tid = (op_pthread_t)child;
     nthreads++;

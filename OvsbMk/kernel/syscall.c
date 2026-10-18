@@ -1691,6 +1691,16 @@ void syscall_handler(uint64_t *regs) {
         int fd = (int)a1;
         const char *buf = (const char *)a2;
         int count = (int)a3;
+        extern void serial_puts(const char *s);
+        extern void serial_puthex(uint32_t v);
+        extern int process_current_pid(void);
+        serial_puts("[WRITE] pid=");
+        serial_puthex((uint32_t)process_current_pid());
+        serial_puts(" fd=");
+        serial_puthex((uint32_t)fd);
+        serial_puts(" count=");
+        serial_puthex((uint32_t)count);
+        serial_puts("\n");
         ret = do_write_fd(fd, buf, count);
         break;
     }
@@ -2043,14 +2053,27 @@ void syscall_handler(uint64_t *regs) {
     /* ~~ Linux clone (56) ~ threads do musl! ~~
      * ATENÇÃO args: clone é identity-mapped, então o Zig NÃO move
      * r10->rcx. Assinatura Linux: clone(flags, stack, ptid, tls,
-     * ctid) = rdi, rsi, rdx, r10, r8. No frame: regs[4],regs[3],
-     * regs[2],regs[7],regs[5]. LER DIRETO DOS REGS!~~ */
+     * ctid) = rdi, rsi, rdx, r10, r8. No frame do syscall_entry:
+     * regs[0..13] = r15,r14,r13,r12,rbp,rbx,r11,r10,r9,r8,rdi,rsi,rdx,rax.
+     * Então rdi=regs[10], rsi=regs[11], rdx=regs[12], r10=regs[7], r8=regs[9].
+     * Ler dos índices errados (regs[4]=rbp, etc.) corrompia todos os
+     * argumentos e fazia clone retornar lixo (+0x68-adjacente).~~ */
     case 56: {
-        uint64_t flags_ = regs[4];
-        uint64_t newsp_ = regs[3];
-        uint64_t ptid_  = regs[2];
-        uint64_t tls_   = regs[7];
-        uint64_t ctid_  = regs[5];
+        uint64_t flags_ = regs[10];   /* rdi = arg1 = flags */
+        uint64_t newsp_ = regs[11];   /* rsi = arg2 = stack */
+        uint64_t ptid_  = regs[12];   /* rdx = arg3 = ptid */
+        uint64_t tls_   = regs[7];    /* r10 = arg4 = tls */
+        uint64_t ctid_  = regs[9];    /* r8  = arg5 = ctid */
+        extern void serial_puts(const char *s);
+        extern void serial_puthex(uint32_t v);
+        extern int process_current_pid(void);
+        serial_puts("[CLONE56] pid=");
+        serial_puthex((uint32_t)process_current_pid());
+        serial_puts(" flags=");
+        serial_puthex((uint32_t)(flags_ & 0xFFFFFFFF));
+        serial_puts(" newsp=");
+        serial_puthex((uint32_t)(newsp_ & 0xFFFFFFFF));
+        serial_puts(" -> ");
         int cpid;
         if ((flags_ & 0x00010000ULL) && (flags_ & 0x00000100ULL)) {
             cpid = proc_clone_thread(flags_, newsp_, ptid_, ctid_, tls_, regs);
@@ -2058,6 +2081,8 @@ void syscall_handler(uint64_t *regs) {
             cpid = proc_fork(regs);
             if (cpid >= 0) schedule();
         }
+        serial_puthex((uint32_t)(cpid & 0xFFFFFFFF));
+        serial_puts("\n");
         ret = (uint64_t)cpid;
         break;
     }

@@ -671,13 +671,8 @@ void shell_init(void) {
     /* AUTO-BOOT Fase 8.1: compositor + desktop (foot manual via menu). */
     cmd_exec("/BIN/WAYLAND_COMPOSITOR_LIB &");
     sleep_ms(2000);
-    /* FASE 4: valida libwayland-client (conecta ao compositor acima). */
-    cmd_exec("/BIN/WAYLAND");
-    /* FASE 2: valida pthreads (clone+futex) — mínimo primeiro. */
-    cmd_exec("/BIN/PTHREADM");
-    cmd_exec("/BIN/PTHREADT");
-    /* FASE 3: valida dlopen/dlsym. */
-    cmd_exec("/BIN/DLTEST");
+    /* Teste isolado de sys_write */
+    cmd_exec("/BIN/SWRITE_TEST");
     /* FASE-CONSOLIDA: desktop via .oep (valida o loader no boot). */
     cmd_exec("/BIN/OVSB-DESK.OEP &");
     sleep_ms(2000);

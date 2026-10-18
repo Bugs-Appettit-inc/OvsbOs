@@ -8,7 +8,7 @@
 #include "../../libs/dl/dl.h"
 
 int main(void) {
-    void *h = dlopen("libanswer.so");
+    void *h = dlopen("/BIN/libanswer.so");
     if (h == NULL) {
         printf("dlopen: FALHA (retornou NULL)\n");
         return 1;
